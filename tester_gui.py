@@ -39,7 +39,7 @@ class App:
         root.minsize(960, 640)
 
         self.target = tk.StringVar(value="")
-        self.status = tk.StringVar(value="选一个文件夹或 .py 文件，点「开始体检」")
+        self.status = tk.StringVar(value="选一个文件夹或源码文件，点「开始体检」")
         self.env_text = tk.StringVar(value="正在检测环境…")
 
         self._build_header()
@@ -73,7 +73,7 @@ class App:
         ttk.Label(row, text="路径").pack(side="left")
         ttk.Entry(row, textvariable=self.target).pack(side="left", fill="x", expand=True, padx=6)
         ttk.Button(row, text="选文件夹…", command=self.pick_folder).pack(side="left")
-        ttk.Button(row, text="选 .py 文件…", command=self.pick_file).pack(side="left", padx=4)
+        ttk.Button(row, text="选源码文件…", command=self.pick_file).pack(side="left", padx=4)
         self.btn_scan = ttk.Button(row, text="开始体检", command=self.start)
         self.btn_scan.pack(side="left", padx=8)
         self.run_tests = tk.BooleanVar(value=True)
@@ -85,9 +85,9 @@ class App:
         for name, detail in scanner.SUPPORTED.items():
             line = ttk.Frame(box)
             line.pack(fill="x", anchor="w")
-            ttk.Label(line, text=f"✓ {name}", foreground=COLOR["ok"], width=22).pack(side="left")
-            ttk.Label(line, text=detail, foreground="#4b5563", wraplength=900, justify="left").pack(side="left", fill="x")
-        ttk.Label(box, text=f"✗ {scanner.UNSUPPORTED}", foreground="#9ca3af").pack(anchor="w", pady=(4, 0))
+            ttk.Label(line, text=f"✓ {name}", foreground=COLOR["ok"], width=22).pack(side="left", padx=(0, 8))
+            ttk.Label(line, text=detail, foreground="#4b5563", wraplength=880, justify="left").pack(side="left", fill="x")
+        ttk.Label(box, text=f"注：{scanner.UNSUPPORTED}", foreground="#9ca3af").pack(anchor="w", pady=(4, 0))
 
     def _build_table(self):
         box = ttk.Frame(self.root, padding=(14, 4, 14, 0))
@@ -156,8 +156,15 @@ class App:
 
     def pick_file(self):
         chosen = filedialog.askopenfilename(
-            title="选择要体检的 Python 文件",
-            filetypes=[("Python 源码", "*.py"), ("所有文件", "*.*")],
+            title="选择要体检的源码文件",
+            filetypes=[
+                ("支持的类型", "*.py *.java *.js *.jsx *.ts *.tsx *.go"),
+                ("Python", "*.py"),
+                ("Java", "*.java"),
+                ("JavaScript / TypeScript", "*.js *.jsx *.ts *.tsx"),
+                ("Go", "*.go"),
+                ("所有文件", "*.*"),
+            ],
         )
         if chosen:
             self.target.set(chosen)
@@ -165,14 +172,15 @@ class App:
     def start(self):
         target = self.target.get().strip()
         if not target:
-            messagebox.showinfo("还没选目标", "先选一个文件夹或 .py 文件。")
+            messagebox.showinfo("还没选目标", "先选一个文件夹或源码文件。")
             return
         path = Path(target)
         if not path.exists():
             messagebox.showerror("路径不存在", target)
             return
-        if path.is_file() and path.suffix.lower() != ".py":
-            messagebox.showerror("暂不支持", f"{path.suffix or '无后缀'} 文件暂不支持，目前只解析 .py。")
+        allowed = {".py", *scanner.TEXT_LANGUAGES}
+        if path.is_file() and path.suffix.lower() not in allowed:
+            messagebox.showerror("暂不支持", f"{path.suffix or '无后缀'} 暂不支持，可扫描：{', '.join(sorted(allowed))}")
             return
         self.btn_scan.config(state="disabled")
         self.status.set("正在扫描…")
@@ -198,7 +206,12 @@ class App:
                 item.severity, f"{item.path}:{item.line}", item.kind, item.detail, item.advice,
             ), tags=(item.severity,))
         counts = {level: sum(1 for x in findings if x.severity == level) for level in ("高", "中", "低")}
-        scope = f"单文件 {info.get('target_file')}" if info.get("target_file") else f"{info['python_files']} 个 Python 文件"
+        if info.get("target_file"):
+            scope = f"单文件 {info['target_file']}"
+        else:
+            scope = f"{info['python_files']} 个 Python 文件"
+            if info.get("other_files"):
+                scope += f" + {info['other_files']} 个其他源码"
         test_note = (f" · 自带测试：{test_result['summary']}" if test_result.get("ran")
                      else f" · 自带测试未运行（{test_result.get('reason', '未选择')}）")
         self.status.set(f"已扫描 {scope} · 高危 {counts['高']} / 中危 {counts['中']} / 低危 {counts['低']}{test_note}")

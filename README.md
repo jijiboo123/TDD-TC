@@ -1,6 +1,6 @@
 # 软件测试可视化
 
-接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 92 个用例、UI 9 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、幂等重放、性能基线、浏览器端主流程（含房型与库存），并自带零依赖的指标工具（报告 / 覆盖率 / 性能 / 失败现场留存）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 98 个用例、UI 9 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、幂等重放、性能基线、浏览器端主流程（含房型与库存），并自带零依赖的指标工具（报告 / 覆盖率 / 性能 / 失败现场留存）。
 
 配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（7 个缺陷的完整缺陷单）。
 
@@ -20,9 +20,10 @@
 | 类型 | 检测内容 |
 |---|---|
 | Python 源码 `.py` | 语法错误、硬编码凭据、危险调用（eval / exec / os.system）、可变默认参数、TODO/FIXME、print 残留、assert 做校验 |
+| Java / JavaScript / TypeScript / Go | 轻量文本规则（非 AST）：硬编码凭据、危险调用（eval / Runtime.exec / exec.Command）、调试残留（console.log / System.out / debugger）、TODO/FIXME |
 | 敏感文件 | `.env` / `id_rsa` / `credentials.json` / `.npmrc` / `.pypirc` / `secrets.json` / `config.ini`、`*.pem` `*.key` `*.pfx` `*.p12` |
-| 项目卫生（目录模式） | README、`.gitignore`、tests 目录、`requirements.txt` 是否存在 |
-| 暂不支持 | Java / JavaScript / TypeScript / Go 源码（目前只解析 Python AST） |
+| 项目卫生（仅目录模式） | README、`.gitignore`、tests 目录、`requirements.txt` 是否存在 |
+| 说明 | Java / JS / TS / Go 用正则规则，精度低于 Python AST；不做类型检查 |
 
 > 所有 `.bat` 都是**纯 ASCII 启动器**，只负责调用 Python 脚本；中文提示由 Python 输出。
 > 原因是 cmd 会用控制台代码页（936）读取批处理，UTF-8 中文一旦跨读取缓冲区就会裂开，
@@ -112,9 +113,9 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 92 items
+collected 98 items
 ...
-==================== 89 passed, 3 skipped in 2.60s ====================
+==================== 95 passed, 3 skipped in 1.50s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
@@ -142,7 +143,7 @@ python -m pytest ui_tests -q
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
 | UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除、房型选择与库存显示、售罄提示 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 101 个用例其实只用了 83 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 107 个用例其实只用了 89 个测试函数。
 
 ## 几个值得注意的设计
 

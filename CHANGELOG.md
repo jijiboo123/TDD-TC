@@ -1,5 +1,17 @@
 # 更新日志
 
+## v1.0.4 — 2026-11-04
+
+**体检器支持更多语言**
+
+- 新增 Java / JavaScript / TypeScript / Go 的**轻量文本规则**（不是 AST）：
+  硬编码凭据、危险调用（eval / Runtime.exec / exec.Command / new Function）、
+  调试残留（console.log / System.out / printStackTrace / debugger）、TODO/FIXME
+- 单文件模式现在可以选 `.java` / `.js` / `.jsx` / `.ts` / `.tsx` / `.go`
+- 目录模式会同时统计 Python 与其它源码，界面上显示「N 个 Python 文件 + M 个其他源码」
+- 新增 6 条体检器用例（多语言命中、干净文件不误报、目录模式计数、未知后缀拒绝）
+- 能力边界写清楚：这些语言用正则规则，**精度低于 Python AST，不做类型检查**（界面用「注：」标注，不再显示"不支持"）
+
 ## v1.0.3 — 2026-11-04
 
 **打开就是主页面**

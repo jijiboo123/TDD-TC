@@ -31,14 +31,50 @@ SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "bu
 SUPPORTED = {
     "Python 源码（.py）":
         "语法错误、硬编码凭据、危险调用（eval / exec / os.system）、可变默认参数、TODO/FIXME、print 残留、assert 做校验",
+    "Java / JS / TS / Go":
+        "轻量文本规则（不是 AST）：硬编码凭据、危险调用（eval / Runtime.exec / exec.Command）、"
+        "调试残留（console.log / System.out / debugger）、TODO/FIXME",
     "敏感文件":
         ".env / .env.local / id_rsa / id_dsa / credentials.json / .npmrc / .pypirc / secrets.json / config.ini，"
         "以及 *.pem / *.key / *.pfx / *.p12",
-    "项目卫生（仅目录模式）":
+    "项目卫生（目录模式）":
         "README、.gitignore、tests 目录、requirements.txt 是否存在",
 }
-UNSUPPORTED = "Java / JavaScript / TypeScript / Go 源码暂不解析（目前只做 Python AST）"
+UNSUPPORTED = "Java / JS / TS / Go 用正则规则，精度低于 Python AST；不做类型检查"
 MAX_FILES = 400
+
+# 非 Python 的语言：只做"一眼能看出来的坏味道"，不做语法树
+TEXT_LANGUAGES = {
+    ".java": "Java",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".go": "Go",
+}
+
+TEXT_RULES = (
+    (re.compile(r"(?i)(password|passwd|secret|token|api_?key|access_?key)\s*[:=]\s*['\"][^'\"]{3,}['\"]"),
+     "高", "硬编码凭据", "代码里直接写了密钥 / 口令", "移到环境变量或配置中心，并确认该文件不进版本库"),
+    (re.compile(r"\beval\s*\("),
+     "高", "危险调用", "eval 会执行任意代码", "改用明确的白名单解析"),
+    (re.compile(r"Runtime\.getRuntime\(\)\.exec"),
+     "高", "危险调用", "通过 shell 执行命令", "改用参数化的进程调用，并校验输入来源"),
+    (re.compile(r"\bexec\.Command\("),
+     "中", "危险调用", "Go 里直接起外部命令", "避免把用户输入拼进命令参数"),
+    (re.compile(r"new\s+Function\s*\("),
+     "中", "危险调用", "new Function 等价于 eval", "改用常规函数定义"),
+    (re.compile(r"console\.(log|debug)\s*\("),
+     "低", "调试残留", "生产代码里有 console 输出", "改用日志库并分级"),
+    (re.compile(r"System\.out\.print"),
+     "低", "调试残留", "生产代码里有打印", "改用日志框架"),
+    (re.compile(r"printStackTrace\s*\("),
+     "低", "调试残留", "直接打印堆栈", "改用日志记录异常"),
+    (re.compile(r"\bdebugger\s*;"),
+     "中", "调试残留", "代码里留了 debugger", "提交前删除"),
+    (re.compile(r"\b(TODO|FIXME|XXX)\b"),
+     "低", "待办标记", "代码里有 TODO/FIXME", "确认没被忘记，交付前清理"),
+)
 
 
 class Finding:
@@ -191,31 +227,55 @@ def scan_python(path, rel_path):
     return visitor.findings
 
 
+def scan_text_code(path, rel_path):
+    """扫一个非 Python 的源码文件（Java / JS / TS / Go）：只做正则规则，不做语法树。"""
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as err:
+        return [Finding(rel_path, 0, "中", "读取失败", str(err), "检查文件权限或编码")]
+
+    language = TEXT_LANGUAGES.get(path.suffix.lower(), "文本")
+    findings = []
+    for number, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith(("//", "/*", "*", "#")):
+            continue
+        for pattern, severity, kind, detail, advice in TEXT_RULES:
+            if pattern.search(line):
+                findings.append(Finding(rel_path, number, severity, f"{kind}（{language}）", detail, advice))
+    return findings
+
+
 def scan_project(root):
     """扫整个项目，返回 (findings, 项目信息)"""
     root = Path(root).resolve()
     if not root.is_dir():
         raise SystemExit(f"目录不存在: {root}")
 
-    files, skipped = [], 0
+    python_files, text_files, skipped = [], [], 0
     for path in sorted(root.rglob("*")):
         if not path.is_file() or any(part in SKIP_DIRS for part in path.parts):
             continue
-        if path.suffix.lower() == ".py":
-            if len(files) >= MAX_FILES:
-                skipped += 1
-                continue
-            files.append(path)
+        suffix = path.suffix.lower()
+        if suffix != ".py" and suffix not in TEXT_LANGUAGES:
+            continue
+        if len(python_files) + len(text_files) >= MAX_FILES:
+            skipped += 1
+            continue
+        (python_files if suffix == ".py" else text_files).append(path)
 
     findings = []
-    for path in files:
+    for path in python_files:
         findings.extend(scan_python(path, path.relative_to(root).as_posix()))
+    for path in text_files:
+        findings.extend(scan_text_code(path, path.relative_to(root).as_posix()))
 
     info = {
         "root": str(root),
-        "python_files": len(files),
+        "python_files": len(python_files),
+        "other_files": len(text_files),
         "skipped_files": skipped,
-        "has_tests": any("test" in p.name.lower() for p in files),
+        "has_tests": any("test" in p.name.lower() for p in python_files),
         "has_requirements": (root / "requirements.txt").exists(),
         "has_readme": any(root.glob("README*")),
         "has_package_json": (root / "package.json").exists(),
@@ -244,17 +304,23 @@ def collect(root, with_tests=True):
     """统一入口。
 
     - 目录模式：静态检查 + 项目级体检 +（可选）跑自带测试并合并失败项；
-    - 单文件模式：只扫这个 .py，不跑项目测试。
+    - 单文件模式：只扫这个文件（.py 走 AST，其他支持的语言走正则），不跑项目测试。
     """
     target = Path(root).resolve()
     if target.is_file():
-        if target.suffix.lower() != ".py":
-            raise SystemExit(f"暂不支持这个文件类型：{target.suffix or '无后缀'}（只支持 .py）")
-        findings = scan_python(target, target.name)
+        suffix = target.suffix.lower()
+        if suffix == ".py":
+            findings = scan_python(target, target.name)
+        elif suffix in TEXT_LANGUAGES:
+            findings = scan_text_code(target, target.name)
+        else:
+            supported = "、".join([".py", *sorted(TEXT_LANGUAGES)])
+            raise SystemExit(f"暂不支持这个文件类型：{suffix or '无后缀'}（支持 {supported}）")
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
         info = {
             "root": str(target.parent),
-            "python_files": 1,
+            "python_files": 1 if suffix == ".py" else 0,
+            "other_files": 0 if suffix == ".py" else 1,
             "skipped_files": 0,
             "has_tests": False,
             "has_requirements": (target.parent / "requirements.txt").exists(),
