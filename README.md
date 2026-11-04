@@ -53,7 +53,8 @@ HTTP 000
 ├─ pytest.ini
 ├─ requirements.txt        接口层依赖
 ├─ requirements-ui.txt     UI 层依赖（playwright）
-└─ 运行测试.bat / 安装UI依赖.bat / 运行UI测试.bat / 一键测试.bat
+├─ requirements-allure.txt Allure 依赖（allure-pytest，还需本机有 Java）
+└─ 运行测试.bat / 安装UI依赖.bat / 运行UI测试.bat / 生成Allure报告.bat / 一键测试.bat
 ```
 
 ## 跑起来
@@ -116,7 +117,7 @@ python -m pytest ui_tests -q
 - [x] Playwright UI 层（`ui_tests/`，6 条主流程）
 - [x] 失败现场留存（截图 + trace，CI 自动上传 artifact）
 - [x] 测试方案 + 缺陷记录文档（`docs/`）
-- [ ] Allure 报告（要装 `allure-pytest` + Java 运行时；本机 java.exe 启动即崩，暂缓）
+- [x] Allure 富报告（Temurin JDK 25 + Allure CLI 2.46.1，本机已装）
 
 ## License
 
@@ -334,6 +335,29 @@ SchemaError: 契约不符：
 
 **为什么自己写而不用 jsonschema 包**：这个项目坚持"不装包也能跑"，而且校验器本身也当教学材料——
 面试被问"什么是契约测试"时，能说清快照和规则的区别，比背定义强。
+
+### 13. Allure 报告（需要 Java）
+
+Allure 能出"用例分组、步骤、附件、趋势"的富报告，代价是要 Java 运行时。本机已装好：
+
+| 组件 | 位置 | 说明 |
+|---|---|---|
+| Temurin JDK 25 | `D:\tools\jdk-25.0.5+8` | 免安装 zip，用户级；`JAVA_HOME` 已设 |
+| Allure CLI 2.46.1 | `D:\tools\allure-2.46.1` | 解压版，`bin` 已加进用户 PATH |
+| allure-pytest | pip 包 | 见 `requirements-allure.txt` |
+
+```powershell
+python -m pytest --alluredir=allure-results -q
+allure serve allure-results      # 起服务并自动开浏览器
+```
+
+也可以双击 `生成Allure报告.bat`（会先检查 JAVA_HOME 和 allure 是否就绪）。
+
+![Allure 报告](docs/allure-report.png)
+
+**VS Code 能装 JDK 吗**：VS Code 本身不装 JDK，是"Extension Pack for Java"扩展会提示下载一个，需要你在窗口里点确认。这次改用命令行装了免安装版（不需要管理员）；以后要写 Java，在 VS Code 里装 Java 扩展、把 `java.jdt.ls.java.home` 指向 `D:\tools\jdk-25.0.5+8` 就能复用同一个 JDK。
+
+**一个环境坑**：机器 PATH 里有一条 2021 年 Oracle 残留的 `C:\Program Files\Common Files\Oracle\Java\javapath`，排在用户 PATH 前面、又指向已删除的 JRE，所以直接敲 `java -version` 仍会崩（0xC0000005）。Allure 走的是 `JAVA_HOME`，不受影响；要彻底修需要管理员权限删掉那条 PATH，没有权限时用全路径 `& "$env:JAVA_HOME\bin\java.exe" -version`。
 
 ## 这个项目自己发现过四个问题
 

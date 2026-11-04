@@ -1,0 +1,2 @@
+# Allure 报告需要的额外依赖（跑 --alluredir 时用）
+allure-pytest>=2.13

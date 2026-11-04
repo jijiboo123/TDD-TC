@@ -83,6 +83,37 @@ jobs:
             report.html
           if-no-files-found: ignore
 
+  # ---------- 附加：Allure 报告（只产出报告，不进质量门禁）----------
+  allure:
+    name: Allure 报告
+    needs: regression
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: 安装依赖 + Allure CLI
+        run: |
+          pip install -r requirements.txt -r requirements-allure.txt
+          curl -sSL -o allure.zip https://repo1.maven.org/maven2/io/qameta/allure/allure-commandline/2.46.1/allure-commandline-2.46.1.zip
+          unzip -q allure.zip
+      - name: 跑用例并生成报告
+        run: |
+          python -m pytest --alluredir=allure-results -q || true
+          ./allure-2.46.1/bin/allure generate allure-results -o allure-report --clean
+      - name: 上传 Allure 报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report
+          if-no-files-found: warn
+
   # ---------- 第 4 关：UI 层（Playwright 点真页面）----------
   ui:
     name: UI 层 (Playwright)
