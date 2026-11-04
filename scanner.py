@@ -274,8 +274,6 @@ def main():
     return 0 if not any(x.severity == "高" for x in findings) else 1
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 # ---------------- 项目级体检 ----------------
 
@@ -324,3 +322,7 @@ def parse_test_failures(output):
                                     reason.strip() or "用例失败",
                                     "这条用例红了，说明对应功能当前不可用"))
     return findings
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
