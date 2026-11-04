@@ -123,6 +123,56 @@ assert_error_message(response, "Bad credentials")  # 错误信息里必须有原
 
 `.github/workflows/test.yml` 在 push 时跑三个 Python 版本（3.11/3.12/3.13）。
 
+
+
+### 5. 数据驱动用例
+
+测试场景写在 `data/booking_cases.json` 里，加一行就是加一个用例，不用改代码：
+
+```json
+{"id": "价格为0", "payload": {...}, "expect": 200}
+```
+
+`tests/test_data_driven.py` 读这个文件，用 `@pytest.mark.parametrize` 展开。
+
+### 6. 契约快照
+
+`contract.py` 记录响应里每个字段的**类型结构**，结构变了就失败：
+
+```
+snapshots/create_booking.json
+{ "booking": { "bookingdates": {"checkin": "str", ...}, "totalprice": "int" }, "bookingid": "int" }
+```
+
+**为什么需要**：后端把 `totalprice` 从数字改成字符串，功能断言可能照样过，但前端会炸。契约测试专盯这个。
+
+```bash
+python contract.py          # 重新生成快照（确认改动是预期的）
+pytest tests/test_contract.py
+```
+
+### 7. 切换被测服务
+
+默认跑本地 mock。要测真实服务就设环境变量：
+
+```powershell
+$env:API_BASE_URL = "http://127.0.0.1:8000"
+python -m pytest
+```
+
+## 这个项目自己发现过两个缺陷
+
+写完数据驱动用例后，**测试立刻抓到 mock 服务的两个真实缺陷**：
+
+| 缺陷 | 症状 | 修复 |
+|---|---|---|
+| 空名字能创建 | `firstname: ""` 返回 200 | `validate()` 加非空检查 |
+| 假日期能通过 | `2026-13-45` 被接受 | 正则只管位数，改用 `datetime.strptime` 真校验 |
+
+补充 `checkout > checkin` 规则后，用例从 2 failed 变成全绿。
+
+**这就是测试的价值**——不是"证明代码是对的"，是"在它错的时候立刻知道"。
+
 ## 还能加什么
 
 - [ ] 数据驱动：用例参数放进 JSON/YAML，代码只写一遍

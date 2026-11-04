@@ -6,6 +6,7 @@
   - 造数据的夹具负责善后（yield 之后删除），用例之间不互相影响
 """
 
+import os
 import socket
 import time
 
@@ -29,6 +30,12 @@ def _wait_ready(base_url, timeout=5.0):
 
 @pytest.fixture(scope="session")
 def base_url():
+    # 设了 API_BASE_URL 就连真实服务，否则用本地 mock
+    external = os.environ.get("API_BASE_URL")
+    if external:
+        assert _wait_ready(external), f"外部服务连不上: {external}"
+        yield external
+        return
     server, url = mock_server.start(port=0)
     assert _wait_ready(url), "mock 服务启动后 /ping 不通"
     yield url

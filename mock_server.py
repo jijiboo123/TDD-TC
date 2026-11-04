@@ -11,6 +11,7 @@
 
 import argparse
 import json
+from datetime import datetime
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -61,6 +62,18 @@ def validate(body):
     for key in ("checkin", "checkout"):
         if not pattern.match(str(dates.get(key, ""))):
             return f"bookingdates.{key} 要写成 YYYY-MM-DD"
+    # 空名字没有意义，应当拒绝（这条是数据驱动用例发现的）
+    for field in ("firstname", "lastname"):
+        if not str(body.get(field, "")).strip():
+            return f"{field} 不能为空"
+    # 正则只管位数，管不了 2026-13-45 这种假日期（也是测试发现的）
+    try:
+        checkin = datetime.strptime(str(dates["checkin"]), "%Y-%m-%d")
+        checkout = datetime.strptime(str(dates["checkout"]), "%Y-%m-%d")
+    except ValueError:
+        return "bookingdates 里的日期不是合法日期"
+    if checkout <= checkin:
+        return "退房日期必须晚于入住日期"
     if not isinstance(body.get("depositpaid"), bool):
         return "depositpaid 必须是布尔值"
     if not isinstance(body.get("totalprice"), (int, float)):

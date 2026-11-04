@@ -1,0 +1,12 @@
+{
+  "说明": "数据驱动的用例数据。加一行就等于加一个用例，不用改代码。",
+  "cases": [
+    {"id": "正常预订", "payload": {"firstname": "佳吉", "lastname": "刘", "totalprice": 288, "depositpaid": true, "bookingdates": {"checkin": "2026-11-10", "checkout": "2026-11-12"}}, "expect": 200},
+    {"id": "价格为0", "payload": {"firstname": "A", "lastname": "B", "totalprice": 0, "depositpaid": false, "bookingdates": {"checkin": "2026-12-01", "checkout": "2026-12-02"}}, "expect": 200},
+    {"id": "跨年入住", "payload": {"firstname": "A", "lastname": "B", "totalprice": 999, "depositpaid": true, "bookingdates": {"checkin": "2026-12-31", "checkout": "2027-01-02"}}, "expect": 200},
+    {"id": "名称为空", "payload": {"firstname": "", "lastname": "刘", "totalprice": 100, "depositpaid": true, "bookingdates": {"checkin": "2026-11-10", "checkout": "2026-11-12"}}, "expect": 400},
+    {"id": "价格是字符串", "payload": {"firstname": "A", "lastname": "B", "totalprice": "288", "depositpaid": true, "bookingdates": {"checkin": "2026-11-10", "checkout": "2026-11-12"}}, "expect": 400},
+    {"id": "缺 depositpaid", "payload": {"firstname": "A", "lastname": "B", "totalprice": 288, "bookingdates": {"checkin": "2026-11-10", "checkout": "2026-11-12"}}, "expect": 400},
+    {"id": "日期不合法", "payload": {"firstname": "A", "lastname": "B", "totalprice": 288, "depositpaid": true, "bookingdates": {"checkin": "2026-13-45", "checkout": "2026-11-12"}}, "expect": 400}
+  ]
+}
