@@ -73,3 +73,60 @@ collected 34 items
 ## License
 
 MIT
+
+## 测试工作流
+
+一套能日常用的流程，不只是"跑一下看看"。
+
+```
+写用例  →  冒烟先跑（-m smoke）  →  全量回归  →  出报告  →  看红字定位  →  修
+                                        ↑                              ↓
+                                     CI 每次提交自动跑  ←───────────────┘
+```
+
+### 1. 分层：冒烟 / 回归
+
+用例打了标记（`pytest.ini` 里声明），可以分开跑：
+
+```bash
+pytest -m smoke            # 只跑冒烟（4 个，0.5s）—— 服务挂了立刻知道
+pytest -m "not smoke"      # 跳过冒烟，只跑细节
+pytest -m regression       # 回归组
+```
+
+**为什么分层**：CI 上先跑冒烟，挂了就不用浪费时间跑后面几百个用例。
+
+### 2. 断言要能"说清哪不对"
+
+`assertions.py` 提供四个helper，失败时会把实际响应体打出来：
+
+```python
+from assertions import assert_status, assert_json_field, assert_fields_present, assert_error_message
+
+assert_status(response, 200, "创建预订")          # 失败会带上响应体
+assert_fields_present(body, ["token"], "登录返回")  # 缺字段会说缺哪个
+assert_error_message(response, "Bad credentials")  # 错误信息里必须有原因
+```
+
+对比一下：
+
+| 写法 | 失败时你看到 |
+|---|---|
+| `assert r.status_code == 200` | `assert 500 == 200` ← 还得自己复现 |
+| `assert_status(r, 200, "创建预订")` | 状态码 + 请求 URL + 响应体 ← 直接定位 |
+
+### 3. 一键跑 + 出报告
+
+双击 `一键测试.bat`：跑全量 → 生成 HTML 报告 → 自动开浏览器。
+
+### 4. CI
+
+`.github/workflows/test.yml` 在 push 时跑三个 Python 版本（3.11/3.12/3.13）。
+
+## 还能加什么
+
+- [ ] 数据驱动：用例参数放进 JSON/YAML，代码只写一遍
+- [ ] 失败重试：网络抖动导致的偶发失败自动重跑
+- [ ] 覆盖率：`pytest-cov`（需装包）
+- [ ] Playwright 补 UI 层
+
