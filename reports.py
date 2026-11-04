@@ -149,7 +149,7 @@ def _render_test_html(cases, summary, elapsed, pytest_output):
 
     return f"""<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
-<title>接口自动化测试报告 · {time.strftime('%Y-%m-%d %H:%M:%S')}</title>
+<title>软件测试可视化 · 测试报告 · {time.strftime('%Y-%m-%d %H:%M:%S')}</title>
 <style>
   :root {{ color-scheme: light dark; }}
   * {{ box-sizing: border-box; }}
@@ -176,7 +176,7 @@ def _render_test_html(cases, summary, elapsed, pytest_output):
          padding:8px; border-radius:6px; margin:6px 0 0; }}
   details summary {{ cursor:pointer; font-size:12px; opacity:.7; }}
 </style></head><body>
-<h1>接口自动化测试报告</h1>
+<h1>软件测试可视化 · 测试报告</h1>
 <div class="sub">生成于 {time.strftime('%Y-%m-%d %H:%M:%S')} · pytest + requests · 被测服务由 mock_server.py 提供</div>
 <div class="cards">{cards_html}</div>
 <div class="bar">{bars}</div>
@@ -248,7 +248,7 @@ def render_scan_report(findings, info, test_result, out_path):
                      f'{html.escape(test_result.get("reason", ""))}</div>')
 
     page = f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>软件体检报告 · {time.strftime('%Y-%m-%d %H:%M')}</title>
+<title>软件测试可视化 · 体检报告 · {time.strftime('%Y-%m-%d %H:%M')}</title>
 <style>
  :root {{ color-scheme: light dark; }} * {{ box-sizing: border-box; }}
  body {{ margin:0; padding:28px 32px; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
@@ -272,7 +272,7 @@ def render_scan_report(findings, info, test_result, out_path):
  .test.warn {{ background:rgba(224,161,60,.12); border:1px solid rgba(224,161,60,.4); }}
  pre {{ white-space:pre-wrap; font-size:12px; margin:8px 0 0; }}
 </style></head><body>
-<h1>软件体检报告</h1>
+<h1>软件测试可视化 · 体检报告</h1>
 <div class="sub">扫描于 {time.strftime('%Y-%m-%d %H:%M:%S')} · 目录 {html.escape(info['root'])}</div>
 <div class="cards">{cards_html}</div>
 <div class="bar">{bar}</div>

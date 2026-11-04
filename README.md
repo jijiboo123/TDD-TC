@@ -1,4 +1,4 @@
-# api-testing-demo
+# 软件测试可视化
 
 接口自动化测试练习项目：**pytest + requests**，34 个用例，覆盖正常流程与异常边界。
 
@@ -16,7 +16,7 @@ HTTP 000
 ## 目录
 
 ```
-api-testing-demo/
+软件测试可视化/
 ├─ mock_server.py          本地 API（201 行，只用标准库）
 ├─ conftest.py             pytest 夹具：起服务、鉴权、造数据、清数据
 ├─ tests/

@@ -22,7 +22,7 @@ class App:
         self.findings = []
         self.info = {}
         self.test_result = {}
-        root.title("软件体检器 · 选一个文件夹就能查 bug")
+        root.title("软件测试可视化")
         root.geometry("1120x720")
         root.minsize(900, 600)
 
