@@ -125,10 +125,19 @@ jobs:
           pip install -r requirements.txt
           curl -sSL -o allure.zip https://repo1.maven.org/maven2/io/qameta/allure/allure-commandline/2.46.1/allure-commandline-2.46.1.zip
           unzip -q allure.zip
+      - name: 恢复历史趋势（让 Trend 图跨多次运行连起来）
+        uses: actions/cache@v4
+        with:
+          path: allure-history
+          key: allure-history-${{ github.run_id }}
+          restore-keys: |
+            allure-history-
       - name: 跑用例并生成报告
         run: |
+          if [ -d allure-history ]; then mkdir -p allure-results/history && cp -r allure-history/* allure-results/history/; fi
           python -m pytest --alluredir=allure-results -q || true
           ./allure-2.46.1/bin/allure generate allure-results -o allure-report --clean
+          mkdir -p allure-history && cp -r allure-report/history/* allure-history/
       - name: 上传 Allure 报告
         uses: actions/upload-artifact@v4
         with:

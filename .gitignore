@@ -3,6 +3,7 @@ __pycache__/
 .pytest_cache/
 allure-results/
 allure-report/
+allure-history/
 .venv/
 report.xml
 report.html

@@ -22,8 +22,14 @@ if errorlevel 1 (
 )
 
 echo JAVA_HOME = %JAVA_HOME%
-python -m pytest --alluredir=allure-results -q
+python allure_run.py
+if errorlevel 1 (
+  echo.
+  echo [结果] 报告没生成成功，把上面的报错发我。
+  pause
+  exit /b 1
+)
+
 echo.
-echo ==== 生成并打开 Allure 报告（按 Ctrl+C 结束服务）====
-call allure serve allure-results
-pause
+echo ==== 打开报告（按 Ctrl+C 结束本地服务）====
+call allure open allure-report

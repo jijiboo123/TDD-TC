@@ -28,6 +28,7 @@ HTTP 000
 ├─ contract.py             生成 / 比对契约快照
 ├─ schema_validator.py     JSON Schema 校验（零依赖，规则级契约）
 ├─ reports.py              report.xml → 自包含 HTML 报告
+├─ allure_run.py           跑用例 + 带历史趋势 + 生成 Allure 报告
 ├─ scanner.py              图形化体检器（静态检查 + 跑测试）
 ├─ tests/
 │   ├─ test_health.py      健康检查与路由（5 个）
@@ -463,6 +464,23 @@ create   30     80    36.9ms  45.7ms  46.4ms  46.6ms   648.5/s    0
 **第一次跑就发现一个真问题**：并发 10 时 p99 突然飙到 515ms。原因是 `ThreadingHTTPServer` 默认监听队列只有 5，
 多出来的连接在队列里排队。把 `request_queue_size` 调到 64 后，p99 回到 14ms 左右——
 这就是性能基线存在的意义：**功能全绿的时候，它还能告诉你哪里在悄悄变慢**。
+
+### 17. Allure 历史趋势
+
+单次报告只回答"这一轮过没过"；趋势图回答"这几周有没有变差"。
+
+```powershell
+python allure_run.py          # 跑用例 + 带上历史 + 生成报告
+python allure_run.py --open   # 生成后直接打开
+```
+
+原理很简单：Allure 的 Trend 读的是报告目录里的 `history/`。所以每次生成前，先把上一次的
+`allure-report/history` 拷进 `allure-results/`，生成时它就会被带进新报告。本地连跑两次就能看到折线。
+
+CI 里用 `actions/cache` 把 `allure-history` 存下来（key 用 `run_id`，`restore-keys` 前缀匹配上一份），
+每次运行先恢复、跑完再写回，于是 GitHub 上的报告也能积累趋势——不用 gh-pages、不用额外服务器。
+
+`生成Allure报告.bat` 也已经改成调用 `allure_run.py`，双击即可。
 
 ## 这个项目自己发现过六个问题
 
