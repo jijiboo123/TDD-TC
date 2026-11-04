@@ -188,27 +188,6 @@ def _render_test_html(cases, summary, elapsed, pytest_output):
 <pre>{html.escape(pytest_output[-4000:])}</pre></details>
 </body></html>"""
 
-def _test_main():
-    parser = argparse.ArgumentParser(description="生成可视化测试报告")
-    parser.add_argument("--open", action="store_true", help="生成后用浏览器打开")
-    parser.add_argument("args", nargs="*", help="透传给 pytest 的参数，例如 -k validation")
-    options = parser.parse_args()
-
-    code, elapsed, output = run_pytest(options.args)
-    cases, summary = parse_results()
-    HTML_OUT.write_text(render_html(cases, summary, elapsed, output), encoding="utf-8")
-
-    print(f"用例 {summary['total']} 个：通过 {summary['passed']}，失败 {summary['failed'] + summary['error']}，"
-          f"跳过 {summary['skipped']}，耗时 {elapsed:.2f}s")
-    print(f"报告已生成：{HTML_OUT}")
-
-    if options.open:
-        webbrowser.open(HTML_OUT.as_uri())
-        print("已在浏览器中打开")
-    return code
-
-
-
 
 # ---------------- 体检报告 ----------------
 

@@ -92,7 +92,8 @@ class App:
             findings, info, test_result = scanner.collect(target, with_tests=with_tests)
             self.root.after(0, lambda: self._show(findings, info, test_result))
         except Exception as err:  # noqa: BLE001 - 界面不能因为一个坏项目崩掉
-            self.root.after(0, lambda: self._fail(err))
+            # err 在 except 结束时会被删掉，lambda 里要绑到底包参数上，否则回调执行时 NameError
+            self.root.after(0, lambda error=err: self._fail(error))
 
     def _fail(self, err):
         self.btn_scan.config(state="normal")

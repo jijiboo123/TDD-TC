@@ -42,10 +42,24 @@
     <label>姓 <input id="lastname" placeholder="刘"></label>
     <label>价格 <input id="totalprice" type="number" value="288"></label>
     <label><input id="depositpaid" type="checkbox" checked> 已付押金</label>
+    <label>房型
+      <select id="roomtype">
+        <option value="standard">标准间</option>
+        <option value="limited">限量间</option>
+        <option value="deluxe">豪华间</option>
+      </select>
+    </label>
     <label>入住 <input id="checkin" type="date" value="2026-11-10"></label>
     <label>退房 <input id="checkout" type="date" value="2026-11-12"></label>
     <button id="create" disabled>创建预订</button>
     <div id="message"></div>
+  </section>
+
+  <section id="stock-panel">
+    <span>剩余库存：</span>
+    <span class="stock-item">标准间 <b id="stock-standard">-</b></span>
+    <span class="stock-item">限量间 <b id="stock-limited">-</b></span>
+    <span class="stock-item">豪华间 <b id="stock-deluxe">-</b></span>
   </section>
 
   <section>
@@ -127,6 +141,18 @@
       }
     }
 
+    async function refreshStock() {
+      try {
+        const stock = await api("/rooms");
+        for (const [room, left] of Object.entries(stock)) {
+          const cell = document.querySelector("#stock-" + room);
+          if (cell) cell.textContent = String(left);
+        }
+      } catch (error) {
+        say(error.message, "error");
+      }
+    }
+
     document.querySelector("#login").addEventListener("click", async () => {
       try {
         const body = JSON.stringify({
@@ -155,12 +181,18 @@
           checkout: document.querySelector("#checkout").value,
         },
       };
+      const roomtype = document.querySelector("#roomtype").value;
       try {
-        await api("/booking", { method: "POST", body: JSON.stringify(payload) });
+        await api("/booking?roomtype=" + encodeURIComponent(roomtype), {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
         say("创建成功", "ok");
         await refresh();
+        await refreshStock();
       } catch (error) {
         say(error.message, "error");
+        await refreshStock();
       }
     });
 
@@ -179,10 +211,13 @@
           say("已删除", "ok");
         }
         await refresh();
+        await refreshStock();
       } catch (error) {
         say(error.message, "error");
       }
     });
+
+    refreshStock();
   </script>
 </body>
 </html>

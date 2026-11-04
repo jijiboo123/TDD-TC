@@ -15,6 +15,7 @@
 
 import allure
 import pytest
+import requests
 from playwright.sync_api import expect
 
 pytestmark = [pytest.mark.ui, allure.feature("UI · 预订管理")]
@@ -84,3 +85,33 @@ def test_delete_removes_the_row(page):
     page.locator("#booking-rows tr").first.locator(".delete").click()
     expect(page.locator("#message")).to_have_text("已删除")
     expect(page.locator("#booking-rows tr")).to_have_count(0)
+
+
+def test_stock_panel_shows_initial_stock(page):
+    """库存面板：打开页面就能看到各房型余量（不用登录）。"""
+    expect(page.locator("#stock-limited")).to_have_text("5")
+    expect(page.locator("#stock-deluxe")).to_have_text("3")
+
+
+def test_limited_room_booking_decreases_stock(page):
+    """选限量间下单：库存从 5 变 4 —— 页面把接口算出来的库存也渲染对了。"""
+    login(page)
+    page.select_option("#roomtype", "limited")
+    create_booking(page)
+    expect(page.locator("#booking-rows tr")).to_have_count(1)
+    expect(page.locator("#stock-limited")).to_have_text("4")
+
+
+def test_sold_out_room_shows_error(base_url, auth_headers, page, booking_payload):
+    """限量间卖光后，页面上再下单要看到"售罄"，而不是静默失败。"""
+    for index in range(5):
+        body = {**booking_payload, "firstname": f"占位{index}"}
+        assert requests.post(f"{base_url}/booking?roomtype=limited", json=body,
+                             headers=auth_headers).status_code == 200
+
+    login(page)
+    page.select_option("#roomtype", "limited")
+    create_booking(page)
+    expect(page.locator("#message")).to_contain_text("售罄")
+    expect(page.locator("#stock-limited")).to_have_text("0")
+    expect(page.locator("#booking-rows tr")).to_have_count(5)
