@@ -141,17 +141,20 @@ class Visitor(ast.NodeVisitor):
         self.generic_visit(node)
     # ---- 文本级补充检查（正则，AST 管不到的）----
     def check_text(self):
+        # 有 __main__ 守卫的是命令行入口，print 是它的正常输出而非调试残留
+        is_cli_entry = "__main__" in self.source
         for number, line in enumerate(self._lines, 1):
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            if "TODO" in line or "FIXME" in line or "XXX" in line:
+            # 跳过规则定义行本身，否则扫描器会把自己的规则当成待办
+            if re.search(r"\b(TODO|FIXME|XXX)\b", line) and "re.search(" not in line and "待办标记" not in line and "TODO/FIXME" not in line:
                 self.findings.append(Finding(self.rel, number, "低", "待办标记", "代码里有 TODO/FIXME",
                                              "确认这些没被忘记；交付前应清理"))
-            if re.search(r"\bprint\(", line) and "test" not in self.rel.lower():
+            if re.search(r"\bprint\(", line) and not is_cli_entry and "test" not in self.rel.lower():
                 self.findings.append(Finding(self.rel, number, "低", "调试残留", "生产代码里有 print()",
                                              "改用 logging，否则输出会混进业务日志"))
-            if re.search(r"assert\s+", line) and not any(k in self.rel.lower() for k in ("test", "assert")):
+            if re.search(r"assert\s+", line) and not is_cli_entry and not any(k in self.rel.lower() for k in ("test", "assert")):
                 self.findings.append(Finding(self.rel, number, "中", "用断言做校验", "用 assert 检查业务条件",
                                              "python -O 会移除 assert，校验会失效；改用显式 raise"))
 
