@@ -15,6 +15,9 @@ import requests
 
 import mock_server
 
+# 让 retry.py 里的失败重试插件自动生效（不需要 pip 装 pytest-rerunfailures）
+pytest_plugins = ["retry"]
+
 
 def _wait_ready(base_url, timeout=5.0):
     """等 /ping 通，最多等 timeout 秒"""

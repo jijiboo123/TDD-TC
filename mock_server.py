@@ -43,6 +43,11 @@ class Store:
         with self.lock:
             return dict(self.items)
 
+    def delete(self, key):
+        """查和删必须在同一把锁里 —— 否则两个并发删除会都返回 201（都以为自己删成功了）。"""
+        with self.lock:
+            return self.items.pop(key, None) is not None
+
 
 STORE = Store()
 VALID_TOKEN = "test-token-123"
@@ -149,13 +154,16 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return self._send(403, {"error": "forbidden"})
         key = int(match.group(1))
-        if key not in STORE.all():
+        with STORE.lock:
+            exists = key in STORE.items
+        if not exists:
             return self._send(404, {"error": "not found"})
         body = self._read_json()
         error = validate(body)
         if error:
             return self._send(400, {"error": error})
-        STORE.items[key] = body
+        with STORE.lock:
+            STORE.items[key] = body
         return self._send(200, body)
 
     def do_PATCH(self):
@@ -165,7 +173,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return self._send(403, {"error": "forbidden"})
         key = int(match.group(1))
-        current = STORE.all().get(key)
+        with STORE.lock:
+            current = STORE.items.get(key)
         if current is None:
             return self._send(404, {"error": "not found"})
         patch = self._read_json() or {}
@@ -173,7 +182,8 @@ class Handler(BaseHTTPRequestHandler):
         error = validate(merged)
         if error:
             return self._send(400, {"error": error})
-        STORE.items[key] = merged
+        with STORE.lock:
+            STORE.items[key] = merged
         return self._send(200, merged)
 
     def do_DELETE(self):
@@ -183,10 +193,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return self._send(403, {"error": "forbidden"})
         key = int(match.group(1))
-        if key not in STORE.all():
+        if not STORE.delete(key):
             return self._send(404, {"error": "not found"})
-        with STORE.lock:
-            STORE.items.pop(key, None)
         return self._send(201, "Created")
 
 def start(port=0):
