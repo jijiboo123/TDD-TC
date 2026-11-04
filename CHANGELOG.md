@@ -1,5 +1,14 @@
 # 更新日志
 
+## v1.0.1 — 2026-11-04
+
+**开箱即用**
+
+- 新增 `开始使用.bat`：9 个入口的一键控制台（接口 / UI / 报告 / Allure / 覆盖率 / 性能 / 真实 API / 打开目录 / 退出）
+- 新增 `check_env.py`：环境自检（Python、pytest/requests/allure-pytest、playwright+Chromium、Java+allure），从注册表读取 JAVA_HOME/PATH，刚装完不用重启也能识别
+- 桌面快捷方式「软件测试项目」指向控制台菜单
+- README 顶部加「下次打开先看这里」
+
 ## v1.0.0 — 2026-11-04
 
 第一个"拿得出手"的版本：**101 条本地用例 + 10 条联网用例，7 关 CI，7 份缺陷记录**。
