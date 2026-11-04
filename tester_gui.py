@@ -10,7 +10,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-import reporter
+import reports as reporter
 import scanner
 
 COLOR = {"高": "#d9534f", "中": "#e0a13c", "低": "#4c8dff"}
@@ -131,7 +131,7 @@ class App:
             messagebox.showinfo("还没扫描", "先点「开始体检」。")
             return
         target = Path(self.info["root"]) / "体检报告.html"
-        path = reporter.write_report(self.findings, self.info, self.test_result, target)
+        path = reporter.render_scan_report(self.findings, self.info, self.test_result, target)
         webbrowser.open(path.as_uri())
         self.status.set(f"报告已生成并打开：{path}")
 

@@ -1,5 +1,5 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>软件体检报告 · 2026-11-04 15:42</title>
+<title>软件体检报告 · 2026-11-04 15:47</title>
 <style>
  :root { color-scheme: light dark; } * { box-sizing: border-box; }
  body { margin:0; padding:28px 32px; font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
@@ -24,10 +24,20 @@
  pre { white-space:pre-wrap; font-size:12px; margin:8px 0 0; }
 </style></head><body>
 <h1>软件体检报告</h1>
-<div class="sub">扫描于 2026-11-04 15:42:37 · 目录 D:\deepseek harness工作台\调试代码能力\api-testing-demo</div>
-<div class="cards"><div class="card"><div class="num" style="color:#d9534f">1</div><div class="label">高危</div></div><div class="card"><div class="num" style="color:#e0a13c">0</div><div class="label">中危</div></div><div class="card"><div class="num" style="color:#4c8dff">0</div><div class="label">低危</div></div><div class="card"><div class="num" style="color:#8b93a7">16</div><div class="label">扫描文件</div></div></div>
+<div class="sub">扫描于 2026-11-04 15:47:25 · 目录 D:\deepseek harness工作台\调试代码能力\api-testing-demo</div>
+<div class="cards"><div class="card"><div class="num" style="color:#d9534f">1</div><div class="label">高危</div></div><div class="card"><div class="num" style="color:#e0a13c">0</div><div class="label">中危</div></div><div class="card"><div class="num" style="color:#4c8dff">0</div><div class="label">低危</div></div><div class="card"><div class="num" style="color:#8b93a7">15</div><div class="label">扫描文件</div></div></div>
 <div class="bar"><div style="width:100.00%;background:#d9534f"></div></div>
 <table><thead><tr><th>级别</th><th>位置</th><th>类型</th><th>问题</th><th>建议</th></tr></thead>
 <tbody><tr><td><span class="tag" style="background:#d9534f">高</span></td><td class="path">mock_server.py:48</td><td>硬编码凭据</td><td>VALID_TOKEN 直接写成明文常量</td><td class="advice">移到环境变量或配置文件，并确认该文件不被提交</td></tr></tbody></table>
-<div class="test warn"><b>项目自带测试未运行</b>：已按参数跳过</div>
+<div class="test ok"><b>项目自带测试</b>：======================== 47 passed, 3 skipped in 0.81s ========================<pre>============================= test session starts =============================
+collected 50 items
+tests\test_auth.py ......                                                [ 12%]
+tests\test_contract.py ..                                                [ 16%]
+tests\test_crud.py .........                                             [ 34%]
+tests\test_data_driven.py .......                                        [ 48%]
+tests\test_health.py .....                                               [ 58%]
+tests\test_my_api_template.py sss                                        [ 64%]
+tests\test_smoke.py ....                                                 [ 72%]
+tests\test_validation.py ..............                                  [100%]
+======================== 47 passed, 3 skipped in 0.81s ========================</pre></div>
 </body></html>

@@ -268,8 +268,8 @@ def main():
     print_console(findings, info, test_result)
 
     if args.html:
-        import reporter
-        path = reporter.write_report(findings, info, test_result, Path(args.html))
+        import reports as reporter
+        path = reporter.render_scan_report(findings, info, test_result, Path(args.html))
         print(f"\nHTML 报告: {path}")
     return 0 if not any(x.severity == "高" for x in findings) else 1
 
