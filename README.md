@@ -49,7 +49,7 @@ HTTP 000
 ├─ pytest.ini
 ├─ requirements.txt        接口层依赖
 ├─ requirements-ui.txt     UI 层依赖（playwright）
-└─ 运行测试.bat / 运行UI测试.bat / 一键测试.bat
+└─ 运行测试.bat / 安装UI依赖.bat / 运行UI测试.bat / 一键测试.bat
 ```
 
 ## 跑起来
@@ -262,11 +262,17 @@ CI 里带 `--min 90`，覆盖率掉下去流水线直接红。
 
 ![预订管理页面](docs/ui-page.png)
 
+**最省事的装法**：双击 `安装UI依赖.bat`（自动装包 + 下载浏览器），装完双击 `运行UI测试.bat`。
+
+命令行装法：
+
 ```bash
 pip install -r requirements-ui.txt      # 装 playwright
 python -m playwright install chromium   # 下载浏览器（约 300MB，只需一次）
 python -m pytest ui_tests -v
 ```
+
+> `运行UI测试.bat` 会先自检：没装 playwright 或浏览器没装好时，它会直接告诉你缺什么、该双击哪个文件，不会一闪而过。
 
 用例覆盖：页面加载（未登录时创建按钮禁用）→ 登录解锁 → 创建后列表出现 →
 空名字提交显示后端错误 → 改价生效 → 删除后行消失。

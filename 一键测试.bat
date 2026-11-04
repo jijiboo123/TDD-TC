@@ -6,4 +6,4 @@ echo.
 echo ==== statement coverage ====
 python coverage_simple.py
 echo.
-pause >nul
+pause
