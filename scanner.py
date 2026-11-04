@@ -207,6 +207,7 @@ def scan_project(root):
         "has_requirements": (root / "requirements.txt").exists(),
         "has_readme": any(root.glob("README*")),
         "has_package_json": (root / "package.json").exists(),
+        "has_gitignore": (root / ".gitignore").exists(),
     }
     findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
     return findings, info
@@ -226,6 +227,16 @@ def run_project_tests(root, timeout=180):
         return {"ran": False, "reason": f"测试超过 {timeout} 秒未结束，已放弃"}
     tail = [line for line in (result.stdout or "").strip().splitlines() if line.strip()]
     return {"ran": True, "exit_code": result.returncode, "summary": tail[-1] if tail else "", "output": "\n".join(tail[-25:])}
+
+def collect(root, with_tests=True):
+    """统一入口：静态检查 + 项目级体检 + （可选）跑自带测试并合并失败项"""
+    findings, info = scan_project(root)
+    test_result = run_project_tests(root) if with_tests else {"ran": False, "reason": "已跳过"}
+    if test_result.get("ran") and test_result.get("exit_code"):
+        findings.extend(parse_test_failures(test_result.get("output")))
+        findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
+    return findings, info, test_result
+
 
 # ---------------- 命令行 ----------------
 
@@ -252,8 +263,8 @@ def main():
     parser.add_argument("--no-tests", action="store_true", help="跳过跑项目自带测试")
     args = parser.parse_args()
 
-    findings, info = scan_project(args.target)
-    test_result = {"ran": False, "reason": "已按参数跳过"} if args.no_tests else run_project_tests(args.target)
+    findings, info, test_result = collect(args.target, with_tests=not args.no_tests)
+
     print_console(findings, info, test_result)
 
     if args.html:
@@ -265,3 +276,51 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# ---------------- 项目级体检 ----------------
+
+SENSITIVE_FILES = [".env", ".env.local", "id_rsa", "id_dsa", "credentials.json",
+                   ".npmrc", ".pypirc", "secrets.json", "config.ini"]
+SENSITIVE_SUFFIX = [".pem", ".key", ".pfx", ".p12"]
+
+
+def scan_sensitive(root):
+    """找不该出现在项目里的文件"""
+    findings = []
+    for path in Path(root).rglob("*"):
+        if not path.is_file() or any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.name in SENSITIVE_FILES or path.suffix.lower() in SENSITIVE_SUFFIX:
+            findings.append(Finding(path.relative_to(root).as_posix(), 0, "高", "敏感文件",
+                                    f"项目里有 {path.name}",
+                                    "确认它已加入 .gitignore；若曾提交过，密钥要立刻更换"))
+    return findings
+
+
+def scan_hygiene(root, info):
+    """工程健康度：缺了这些东西，维护成本会变高"""
+    findings = []
+    checks = [
+        ("has_readme", "缺少 README", "低", "别人不知道该项目怎么跑；补一份说明"),
+        ("has_requirements", "缺少依赖清单", "中", "换台机器装不上依赖；补 requirements.txt 或 package.json"),
+        ("has_tests", "项目没有测试", "中", "没有测试就无法验证改动有没有弄坏东西；先补冒烟用例"),
+        ("has_gitignore", "缺少 .gitignore", "中", "缓存和密钥容易被误提交；补一份"),
+    ]
+    for key, problem, severity, advice in checks:
+        if not info.get(key):
+            findings.append(Finding("(项目根目录)", 0, severity, "工程健康度", problem, advice))
+    return findings
+
+
+def parse_test_failures(output):
+    """从 pytest 输出里提取失败用例，转成 findings"""
+    findings = []
+    for line in (output or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("FAILED ") or stripped.startswith("ERROR "):
+            parts = stripped.split(" ", 1)[1]
+            location, _, reason = parts.partition(" - ")
+            findings.append(Finding(location, 0, "高", "测试失败",
+                                    reason.strip() or "用例失败",
+                                    "这条用例红了，说明对应功能当前不可用"))
+    return findings

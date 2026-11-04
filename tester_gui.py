@@ -89,8 +89,7 @@ class App:
 
     def _scan_worker(self, target, with_tests):
         try:
-            findings, info = scanner.scan_project(target)
-            test_result = scanner.run_project_tests(target) if with_tests else {"ran": False, "reason": "已跳过"}
+            findings, info, test_result = scanner.collect(target, with_tests=with_tests)
             self.root.after(0, lambda: self._show(findings, info, test_result))
         except Exception as err:  # noqa: BLE001 - 界面不能因为一个坏项目崩掉
             self.root.after(0, lambda: self._fail(err))
