@@ -83,6 +83,28 @@ jobs:
             report.html
           if-no-files-found: ignore
 
+  # ---------- 附加：性能基线（只出数据，不进质量门禁）----------
+  perf:
+    name: 性能基线（不阻断）
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 并发梯度压测（1/5/20）
+        run: python perf_load.py --requests 120 --levels 1,5,20 --p95-ping 300 --p95-list 400 --p95-create 600 || true
+      - name: 上传性能数据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf-results.json
+          if-no-files-found: ignore
+
   # ---------- 附加：Allure 报告（只产出报告，不进质量门禁）----------
   allure:
     name: Allure 报告

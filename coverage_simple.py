@@ -148,6 +148,12 @@ def scenario(base_url):
     requests.patch(f"{base_url}/booking/{booking_id}", json={"totalprice": "很贵"}, headers=bearer)
     requests.patch(f"{base_url}/booking/{booking_id}", json={"totalprice": 300}, headers=bearer)
 
+    # 幂等：同一个 key 提交两次（第二次走重放分支），再删掉验证幂等键清理
+    idem_headers = {**bearer, "Idempotency-Key": "cov-001"}
+    idem_id = requests.post(f"{base_url}/booking", json=payload, headers=idem_headers).json()["bookingid"]
+    requests.post(f"{base_url}/booking", json=payload, headers=idem_headers)
+    requests.delete(f"{base_url}/booking/{idem_id}", headers=bearer)
+
     # 删除：路由不存在 / 没权限 / 查不到 / 成功 / 再删一次
     requests.delete(f"{base_url}/no-such-route", headers=bearer)
     requests.delete(f"{base_url}/booking/{booking_id}")

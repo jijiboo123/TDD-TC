@@ -1,6 +1,6 @@
 # 软件测试可视化
 
-接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 87 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率 / 失败现场留存）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 92 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、幂等重放、性能基线、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率 / 性能 / 失败现场留存）。
 
 配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（4 个缺陷的完整缺陷单）。
 
@@ -23,6 +23,7 @@ HTTP 000
 ├─ conftest.py             pytest 夹具：起服务、鉴权、造数据、清数据
 ├─ retry.py                失败重试插件（零依赖，给 flaky 用例用）
 ├─ coverage_simple.py      语句覆盖率（零依赖，sys.settrace）
+├─ perf_load.py            性能基线（并发梯度 + p50/p95/p99，零依赖）
 ├─ assertions.py           失败信息更清楚的断言库
 ├─ contract.py             生成 / 比对契约快照
 ├─ schema_validator.py     JSON Schema 校验（零依赖，规则级契约）
@@ -40,6 +41,7 @@ HTTP 000
 │   ├─ test_roles.py       角色越权（6 个）
 │   ├─ test_pagination.py  分页与过滤（8 个）
 │   ├─ test_inventory.py   库存与超卖（5 个）
+│   ├─ test_idempotency.py 幂等键（5 个）
 │   └─ test_concurrency.py 并发安全与延迟（6 个）
 ├─ ui_tests/
 │   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文 + 失败截图
@@ -71,9 +73,9 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 87 items
+collected 92 items
 ...
-==================== 84 passed, 3 skipped in 2.60s ====================
+==================== 89 passed, 3 skipped in 2.60s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
@@ -97,10 +99,11 @@ python -m pytest ui_tests -q
 | 角色权限 | admin 可写、viewer 只读；viewer 的增/改/删都要 403，且数据不能被改动 |
 | 分页 | 首页 / 第二页 / 最后一页不满 / 越界页空列表 / size 非法（0、-1、101）/ 按房型过滤 |
 | 库存 | 下单扣库存、售罄 409、删除退还、10 线程抢 5 间房不超卖 |
+| 幂等 | 同一个 `Idempotency-Key` 重复提交返回同一单；并发 10 线程同 key 只建一单；不带 key 仍是两单 |
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
 | UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 93 个用例其实只用了 75 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 98 个用例其实只用了 80 个测试函数。
 
 ## 几个值得注意的设计
 
@@ -118,10 +121,12 @@ python -m pytest ui_tests -q
 - [x] 零依赖 HTML 报告（`reports.py`）
 - [x] GitHub Actions 五关流水线（静态 → 冒烟 → 回归矩阵 → 覆盖率 → UI）
 - [x] 失败重试（`retry.py`，只给 flaky 用例开）
-- [x] 并发用例 + 零依赖语句覆盖率（94.1%）
+- [x] 并发用例 + 零依赖语句覆盖率（95.0%）
 - [x] 角色权限（admin / viewer）与越权用例
 - [x] 分页、过滤与边界用例
 - [x] 房间库存 + 并发超卖用例
+- [x] 幂等键（重复提交只建一单）
+- [x] 性能基线（并发梯度 + p95/p99 + 阈值判定，零依赖）
 - [x] Playwright UI 层（`ui_tests/`，6 条主流程）
 - [x] 失败现场留存（截图 + trace，CI 自动上传 artifact）
 - [x] 测试方案 + 缺陷记录文档（`docs/`）
@@ -260,8 +265,8 @@ def test_第三方接口():
 
 ```
 被测文件: mock_server.py
-可执行行: 273    已覆盖: 257    覆盖率: 94.1%
-未覆盖的行: 82-83、134、168-169、334-343、347
+可执行行: 282    已覆盖: 268    覆盖率: 95.0%
+未覆盖的行: 143、177-178、352-361、365
 ```
 
 - **分母** = 编译后字节码里的可执行行（不是"文件共多少行"）；
@@ -401,6 +406,63 @@ allure serve allure-results      # 起服务并自动开浏览器
 ```powershell
 python -m pytest tests/test_roles.py tests/test_pagination.py tests/test_inventory.py -v
 ```
+
+### 15. 幂等：重复提交只成功一次
+
+用户手抖点两下、客户端超时重试、消息队列重投，都会让同一个请求到达两次。
+接口约定：请求头带 `Idempotency-Key`，重复提交返回**第一次那一单**。
+
+```powershell
+python -m pytest tests/test_idempotency.py -v
+```
+
+关键在"查 key + 扣库存 + 发号 + 记 key"必须在同一把锁里完成：
+
+```python
+def create_once(self, body, roomtype, idempotency_key=None):
+    with self.lock:
+        if idempotency_key and idempotency_key in self.idempotent:
+            return self.idempotent[idempotency_key], False   # 重放：不改任何状态
+        ...
+```
+
+用例里最狠的一条是 **10 个线程拿同一个 key 同时提交**：
+
+| 实现方式 | 结果 |
+|---|---|
+| 先查 key、再建单（两步） | 10 个线程同时查不到 → 建出 10 单 |
+| 查 + 建在同一把锁里 | 只有 1 单，其余 9 个返回同一个 bookingid |
+
+另外，删除预订会顺手清掉指向它的幂等键，避免重放时返回"幽灵单"。
+
+### 16. 性能基线：并发梯度 + p95/p99
+
+功能测试问"对不对"，性能基线问"多快、并发上去会不会塌"。
+
+```powershell
+python perf_load.py                          # 默认 120 请求，并发 1/5/20
+python perf_load.py --requests 300 --levels 1,10,50
+```
+
+实测输出（本机，仅标准库线程池）：
+
+```
+场景     并发   请求数   p50     p95     p99     最大    吞吐       错误
+ping      1     80     1.7ms   1.9ms   2.0ms   2.1ms   589.2/s    0
+ping     10     80    12.6ms  13.9ms  14.5ms  14.6ms   764.6/s    0
+ping     30     80    33.7ms  38.2ms  39.2ms  39.7ms   716.2/s    0
+create    1     80     1.9ms   2.2ms   2.3ms   4.4ms   518.6/s    0
+create   10     80    13.9ms  15.7ms  17.0ms  17.5ms   676.9/s    0
+create   30     80    36.9ms  45.7ms  46.4ms  46.6ms   648.5/s    0
+```
+
+- 每个场景每个并发级都从干净库存开始（脚本内部直接 `STORE.reset()`）；
+- p95 超过阈值就返回退出码 1，CI 里当"参考数据"跑（不阻断）；阈值可用 `--p95-ping` 等参数放宽；
+- 结果同时写进 `perf-results.json`，CI 作为 artifact 上传。
+
+**第一次跑就发现一个真问题**：并发 10 时 p99 突然飙到 515ms。原因是 `ThreadingHTTPServer` 默认监听队列只有 5，
+多出来的连接在队列里排队。把 `request_queue_size` 调到 64 后，p99 回到 14ms 左右——
+这就是性能基线存在的意义：**功能全绿的时候，它还能告诉你哪里在悄悄变慢**。
 
 ## 这个项目自己发现过六个问题
 

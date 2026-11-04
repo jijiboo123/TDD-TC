@@ -7,6 +7,7 @@ allure-report/
 report.xml
 report.html
 artifacts/
+perf-results.json
 
 
 report.html

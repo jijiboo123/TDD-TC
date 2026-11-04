@@ -44,7 +44,8 @@ class Store:
         self.items = {}
         self.meta = {}      # bookingid -> {"roomtype": ...}，不混进 booking 响应体
         self.stock = dict(ROOM_STOCK)
-        self.lock = threading.Lock()
+        self.idempotent = {}    # Idempotency-Key -> bookingid，重复提交要返回同一单
+        self.lock = threading.RLock()   # 可重入：create_once 里要复用同一把锁
 
     def reset(self):
         with self.lock:
@@ -52,18 +53,36 @@ class Store:
             self.items.clear()
             self.meta.clear()
             self.stock = dict(ROOM_STOCK)
-
-    def create(self, body, roomtype="standard"):
-        with self.lock:
-            key = self.next_id
-            self.next_id += 1
-            self.items[key] = body
-            self.meta[key] = {"roomtype": roomtype}
-            return key
+            self.idempotent.clear()
 
     def all(self):
         with self.lock:
             return dict(self.items)
+
+    def get(self, key):
+        with self.lock:
+            return self.items.get(key)
+
+    def create_once(self, body, roomtype, idempotency_key=None):
+        """幂等创建：查重、扣库存、发号、记账，全部在同一把锁里完成。
+
+        返回 (bookingid, 是否新建)：
+          - 同一个 key 第二次来 → 返回原来的 id，created=False，不重复扣库存；
+          - 库存不足 → (None, False)。
+        """
+        with self.lock:
+            if idempotency_key and idempotency_key in self.idempotent:
+                return self.idempotent[idempotency_key], False
+            if self.stock.get(roomtype, 0) <= 0:
+                return None, False
+            self.stock[roomtype] -= 1
+            key = self.next_id
+            self.next_id += 1
+            self.items[key] = body
+            self.meta[key] = {"roomtype": roomtype}
+            if idempotency_key:
+                self.idempotent[idempotency_key] = key
+            return key, True
 
     def delete(self, key):
         """查和删必须在同一把锁里 —— 否则两个并发删除会都返回 201。删成功要退还库存。"""
@@ -72,28 +91,18 @@ class Store:
             meta = self.meta.pop(key, None)
             if body is None:
                 return False
+            # 单子删了，指向它的幂等键也一起失效，避免重放时返回"幽灵单"
+            for token in [name for name, booking_id in self.idempotent.items() if booking_id == key]:
+                self.idempotent.pop(token, None)
             if meta:
                 room = meta.get("roomtype", "standard")
                 self.stock[room] = self.stock.get(room, 0) + 1
             return True
 
     # ---- 库存 ----
-    def stock_of(self, roomtype):
-        with self.lock:
-            return self.stock.get(roomtype, 0)
-
     def stock_snapshot(self):
         with self.lock:
             return dict(self.stock)
-
-    def reserve(self, roomtype):
-        """查库存 + 扣库存必须在同一把锁里 —— 否则 10 个人同时抢会把 5 间卖成 9 间。"""
-        with self.lock:
-            left = self.stock.get(roomtype, 0)
-            if left <= 0:
-                return False
-            self.stock[roomtype] = left - 1
-            return True
 
 
 STORE = Store()
@@ -262,10 +271,12 @@ class Handler(BaseHTTPRequestHandler):
             roomtype = query.get("roomtype", "standard")
             if roomtype not in ROOM_STOCK:
                 return self._send(400, {"error": f"未知房型 {roomtype}"})
-            if not STORE.reserve(roomtype):
+            idem_key = self.headers.get("Idempotency-Key")
+            key, created = STORE.create_once(body, roomtype, idem_key)
+            if key is None:
                 return self._send(409, {"error": f"{roomtype} 房间已售罄"})
-            key = STORE.create(body, roomtype)
-            return self._send(200, {"bookingid": key, "booking": body})
+            # 重复提交返回的是"原来那一单"，不会多建一条、也不会重复扣库存
+            return self._send(200, {"bookingid": key, "booking": body if created else STORE.get(key)})
         return self._send(404, {"error": "no such route"})
 
     def do_PUT(self):
@@ -322,9 +333,16 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(201, "Created")
 
 
+class Server(ThreadingHTTPServer):
+    """监听队列放大到 64：默认只有 5，压测时连接会在队列里排队，p99 被拖到几百毫秒。"""
+
+    request_queue_size = 64
+    daemon_threads = True
+
+
 def start(port=0):
     """在后台线程起服务，返回 (server, base_url)。port=0 让系统分配空闲端口。"""
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = Server(("127.0.0.1", port), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, f"http://127.0.0.1:{server.server_address[1]}"
@@ -334,7 +352,7 @@ def main():
     parser = argparse.ArgumentParser(description="本地 mock 预订 API")
     parser.add_argument("--port", type=int, default=8321)
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    server = Server(("127.0.0.1", args.port), Handler)
     print(f"mock 服务已启动: http://127.0.0.1:{args.port}")
     print("  例: curl http://127.0.0.1:8321/ping")
     try:
