@@ -47,7 +47,8 @@ HTTP 000
 ├─ ui_tests/
 │   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文 + 失败截图
 │   └─ test_booking_ui.py  UI 主流程（6 个）
-├─ web/index.html          管理页面（登录 / 新建 / 改价 / 删除）
+├─ live_tests/             真实公开 API 联网冒烟（默认 skip，LIVE_API=1 开启）
+├─ web/index.html          管理页面（登录 / 新建 / 改价 / 删除 / 房型库存）
 ├─ schema/                 契约规则（JSON Schema，4 份）
 ├─ artifacts/              失败现场（截图 / trace），不进版本库
 ├─ docs/
@@ -128,6 +129,7 @@ python -m pytest ui_tests -q
 - [x] 房间库存 + 并发超卖用例
 - [x] 幂等键（重复提交只建一单）
 - [x] 性能基线（并发梯度 + p95/p99 + 阈值判定，零依赖）
+- [x] 真实公开 API 冒烟（dummyjson，10 条联网用例，默认跳过）
 - [x] Playwright UI 层（`ui_tests/`，9 条主流程，含房型与库存）
 - [x] ruff 静态检查（未定义名字 / 语法错，CI 第 1 关拦截）
 - [x] 失败现场留存（截图 + trace，CI 自动上传 artifact）
@@ -505,6 +507,30 @@ ruff check .
    回调真正执行时必然 `NameError`。
 
 两个都不是风格问题，是"不跑不知道、跑了才炸"的问题。CI 第 1 关现在会跑 `ruff check .`，这类问题进不了主干。
+
+### 19. 真实公开 API：换环境也能跑
+
+本地 mock 是自己写的靶场，真实项目里接口不归你管。为了验证"这套用例思路不是只能跑在我家"，
+加了一组对 [dummyjson](https://dummyjson.com)（公开假数据 API）的联网用例：
+
+```powershell
+$env:LIVE_API = "1"
+python -m pytest live_tests -v
+```
+
+或者双击 `运行真实API测试.bat`。
+
+10 条用例：登录拿 JWT、错密码被拒、详情契约校验、分页 total/limit/skip、翻页换窗口、
+创建返回新 id、更新标题、删除标记 `isDeleted`、跨公网延迟冒烟。
+
+和本地套件的三个不同：
+
+1. **默认不跑**：`LIVE_API=1` 才执行，日常回归不被外网拖慢；
+2. **连不上就 skip**：网络问题不该报成"测试失败"；
+3. **阈值放宽**：延迟从 200ms 放到 3s——测的是"通不通、会不会离谱"。
+
+实测 `10 passed in 22.52s`（跨公网，比本地 1.4 秒慢十几倍，但结论一样）：
+**同一套测试思路，换一个不受控的服务照样能跑**。
 
 ## 这个项目自己发现过七个问题
 

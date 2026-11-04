@@ -1,0 +1,14 @@
+{
+  "$comment": "dummyjson 的 post 结构（真实公开 API 的契约样本）：必需字段 + 类型，允许它自己加字段",
+  "type": "object",
+  "required": ["id", "title", "body", "userId"],
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "body": { "type": "string", "minLength": 1 },
+    "userId": { "type": "integer", "minimum": 1 },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "views": { "type": "integer", "minimum": 0 },
+    "isDeleted": { "type": "boolean" }
+  }
+}
