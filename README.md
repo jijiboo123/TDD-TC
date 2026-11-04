@@ -357,7 +357,7 @@ allure serve allure-results      # 起服务并自动开浏览器
 
 **VS Code 能装 JDK 吗**：VS Code 本身不装 JDK，是"Extension Pack for Java"扩展会提示下载一个，需要你在窗口里点确认。这次改用命令行装了免安装版（不需要管理员）；以后要写 Java，在 VS Code 里装 Java 扩展、把 `java.jdt.ls.java.home` 指向 `D:\tools\jdk-25.0.5+8` 就能复用同一个 JDK。
 
-**一个环境坑**：机器 PATH 里有一条 2021 年 Oracle 残留的 `C:\Program Files\Common Files\Oracle\Java\javapath`，排在用户 PATH 前面、又指向已删除的 JRE，所以直接敲 `java -version` 仍会崩（0xC0000005）。Allure 走的是 `JAVA_HOME`，不受影响；要彻底修需要管理员权限删掉那条 PATH，没有权限时用全路径 `& "$env:JAVA_HOME\bin\java.exe" -version`。
+**环境坑（已修复）**：机器 PATH 里曾有一条 2021 年 Oracle 残留的 `C:\Program Files\Common Files\Oracle\Java\javapath`，指向已删除的 JRE、又排在用户 PATH 前面，导致直接敲 `java -version` 会崩（0xC0000005）。已用管理员脚本 `D:\tools\fix-java-path.ps1` 删掉该条目，并把 `D:\tools\jdk-25.0.5+8\bin` 放到机器 PATH 首位（原 PATH 备份在 `D:\tools\machine-path-backup.txt`，可回滚）。**新开的窗口**里 `java -version` 已正常；已经开着的终端 / VS Code 要重启才能读到新 PATH。
 
 ## 这个项目自己发现过四个问题
 
