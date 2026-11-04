@@ -55,6 +55,13 @@ def test_error_response_matches_schema(base_url, auth_headers):
     validate(response.json(), schema("error.schema.json"), "错误响应")
 
 
+def test_paged_list_matches_schema(base_url, auth_headers, booking_payload):
+    """分页响应的信封结构：items/total/page/size 一个都不能少。"""
+    requests.post(f"{base_url}/booking", json=booking_payload, headers=auth_headers)
+    body = requests.get(f"{base_url}/booking?page=1&size=1").json()
+    validate(body, schema("booking_page.schema.json"), "分页响应")
+
+
 # ---- 下面三条测的是"校验器自己"：schema 写错、数据变脏时测试要能发现 ----
 
 

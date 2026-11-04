@@ -79,12 +79,18 @@ def scenario(base_url):
     }
     json_type = {"Content-Type": "application/json"}
 
-    # 健康检查、首页、查询
+    # 健康检查、首页、查询（含分页与库存）
     requests.get(f"{base_url}/")
     requests.get(f"{base_url}/ping")
     requests.get(f"{base_url}/booking")
     requests.get(f"{base_url}/booking/999")               # 查不到
     requests.get(f"{base_url}/no-such-route")             # 路由不存在
+    requests.get(f"{base_url}/rooms")
+    requests.get(f"{base_url}/booking?page=1&size=2")     # 分页信封
+    requests.get(f"{base_url}/booking?roomtype=limited")  # 按房型过滤
+    requests.get(f"{base_url}/booking?page=0")            # 非法页码
+    requests.get(f"{base_url}/booking?size=999")          # 非法页大小
+    requests.get(f"{base_url}/booking?page=abc&size=1")   # 非整数参数
 
     # 鉴权：错密码 / 对密码 / 两种携带 token 的方式
     requests.post(f"{base_url}/auth", json={"username": "admin", "password": "bad"})
@@ -93,6 +99,15 @@ def scenario(base_url):
     ).json()["token"]
     bearer = {**json_type, "Authorization": f"Bearer {token}"}
     cookie = {**json_type, "Cookie": f"token={token}"}
+
+    # 只读账号：能查、不能写（403 需要 admin 权限）
+    viewer = requests.post(
+        f"{base_url}/auth", json={"username": "viewer", "password": "viewer123"}
+    ).json()["token"]
+    viewer_headers = {**json_type, "Authorization": f"Bearer {viewer}"}
+    requests.get(f"{base_url}/booking", headers=viewer_headers)
+    requests.post(f"{base_url}/booking", json=payload, headers=viewer_headers)
+    requests.delete(f"{base_url}/booking/1", headers=viewer_headers)
 
     # 创建：没带 token / 坏 JSON / 不是对象 / 各种校验失败 / 成功
     requests.post(f"{base_url}/booking", json=payload)
@@ -112,6 +127,12 @@ def scenario(base_url):
 
     booking_id = requests.post(f"{base_url}/booking", json=payload, headers=bearer).json()["bookingid"]
     requests.get(f"{base_url}/booking/{booking_id}")
+
+    # 库存：未知房型（400）/ 卖到售罄（409）
+    requests.post(f"{base_url}/booking?roomtype=nope", json=payload, headers=bearer)
+    for _ in range(5):
+        requests.post(f"{base_url}/booking?roomtype=limited", json=payload, headers=bearer)
+    requests.post(f"{base_url}/booking?roomtype=limited", json=payload, headers=bearer)
 
     # 全量更新：路由不存在 / 没权限 / 查不到 / 校验失败 / 成功
     requests.put(f"{base_url}/no-such-route", json=payload, headers=bearer)

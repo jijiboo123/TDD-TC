@@ -1,8 +1,13 @@
-"""本地 mock 的「预订管理」API —— 模仿 restful-booker 的接口形状。
+"""本地 mock 的「预订管理」API —— 模仿 restful-booker 的接口形状，再补上真实业务该有的东西。
 
-为什么要本地 mock：restful-booker 部署在 Heroku 免费实例上，2026 年已经下线
+为什么是本地 mock：restful-booker 部署在 Heroku 免费实例上，2026 年已经下线
 （实测 HTTP 000）。测试练习不该被别人的服务器卡住，所以这里用标准库实现一份
 同样形状的接口，行为（含错误码和鉴权）按真实语义来。
+
+除了基础 CRUD，还实现了三样真实系统才有的东西（这样测试才有东西可测）：
+  - 角色权限：admin 可写，viewer 只读（/auth 用不同账号登录拿不同 token）
+  - 分页与过滤：GET /booking?page=1&size=10&roomtype=limited
+  - 房间库存：POST /booking?roomtype=limited 会扣库存，售罄返回 409
 
 启动：
     python mock_server.py            # 默认 127.0.0.1:8321
@@ -16,8 +21,19 @@ import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 BOOKING_FIELDS = ("firstname", "lastname", "totalprice", "depositpaid", "bookingdates")
+
+# 房型 → 初始库存。standard 故意给大一点，老的并发用例（建 30 条）不会被库存挡住。
+ROOM_STOCK = {"standard": 1000, "limited": 5, "deluxe": 3}
+
+# 账号 → 密码 / 角色 / token。真实系统会查库，这里是内存表。
+USERS = {
+    "admin": {"password": "password123", "role": "admin", "token": "test-token-123"},
+    "viewer": {"password": "viewer123", "role": "viewer", "token": "viewer-token-456"},
+}
+TOKENS = {user["token"]: user["role"] for user in USERS.values()}
 
 
 class Store:
@@ -26,18 +42,23 @@ class Store:
     def __init__(self):
         self.next_id = 1
         self.items = {}
+        self.meta = {}      # bookingid -> {"roomtype": ...}，不混进 booking 响应体
+        self.stock = dict(ROOM_STOCK)
         self.lock = threading.Lock()
 
     def reset(self):
         with self.lock:
             self.next_id = 1
             self.items.clear()
+            self.meta.clear()
+            self.stock = dict(ROOM_STOCK)
 
-    def create(self, body):
+    def create(self, body, roomtype="standard"):
         with self.lock:
             key = self.next_id
             self.next_id += 1
             self.items[key] = body
+            self.meta[key] = {"roomtype": roomtype}
             return key
 
     def all(self):
@@ -45,13 +66,37 @@ class Store:
             return dict(self.items)
 
     def delete(self, key):
-        """查和删必须在同一把锁里 —— 否则两个并发删除会都返回 201（都以为自己删成功了）。"""
+        """查和删必须在同一把锁里 —— 否则两个并发删除会都返回 201。删成功要退还库存。"""
         with self.lock:
-            return self.items.pop(key, None) is not None
+            body = self.items.pop(key, None)
+            meta = self.meta.pop(key, None)
+            if body is None:
+                return False
+            if meta:
+                room = meta.get("roomtype", "standard")
+                self.stock[room] = self.stock.get(room, 0) + 1
+            return True
+
+    # ---- 库存 ----
+    def stock_of(self, roomtype):
+        with self.lock:
+            return self.stock.get(roomtype, 0)
+
+    def stock_snapshot(self):
+        with self.lock:
+            return dict(self.stock)
+
+    def reserve(self, roomtype):
+        """查库存 + 扣库存必须在同一把锁里 —— 否则 10 个人同时抢会把 5 间卖成 9 间。"""
+        with self.lock:
+            left = self.stock.get(roomtype, 0)
+            if left <= 0:
+                return False
+            self.stock[roomtype] = left - 1
+            return True
 
 
 STORE = Store()
-VALID_TOKEN = "test-token-123"
 
 
 def validate(body):
@@ -128,51 +173,108 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _authorized(self):
-        """两种写法都认：Authorization: Bearer xxx 或 Cookie: token=xxx"""
+    def _route(self):
+        """把 /booking?page=2&size=5 拆成 路径 + 参数字典。"""
+        parsed = urlparse(self.path)
+        query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+        return parsed.path, query
+
+    def _role(self):
+        """两种写法都认：Authorization: Bearer xxx 或 Cookie: token=xxx。查不到返回 None。"""
         auth = self.headers.get("Authorization") or ""
-        if auth.startswith("Bearer ") and auth[7:] == VALID_TOKEN:
-            return True
+        if auth.startswith("Bearer "):
+            return TOKENS.get(auth[7:])
         cookie = self.headers.get("Cookie") or ""
-        return f"token={VALID_TOKEN}" in cookie
+        matched = re.search(r"token=([^;]+)", cookie)
+        return TOKENS.get(matched.group(1)) if matched else None
+
+    def _admin_only(self):
+        """权限不够时已经发了 403，返回 True；有权限返回 False。"""
+        role = self._role()
+        if role is None:
+            self._send(403, {"error": "forbidden"})
+            return True
+        if role != "admin":
+            self._send(403, {"error": "需要 admin 权限"})
+            return True
+        return False
 
     # ---- 路由 ----
     def do_GET(self):
-        if self.path == "/":
+        path, query = self._route()
+        if path == "/":
             return self._send_page()
-        if self.path == "/ping":
+        if path == "/ping":
             return self._send(200, "pong")
-        if self.path == "/booking":
-            return self._send(200, [{"bookingid": k} for k in STORE.all()])
-        match = re.fullmatch(r"/booking/(\d+)", self.path)
+        if path == "/rooms":
+            return self._send(200, STORE.stock_snapshot())
+        if path == "/booking":
+            return self._list_bookings(query)
+        match = re.fullmatch(r"/booking/(\d+)", path)
         if match:
             item = STORE.all().get(int(match.group(1)))
             return self._send(200, item) if item else self._send(404, {"error": "not found"})
         return self._send(404, {"error": "no such route"})
 
+    def _list_bookings(self, query):
+        """不带 page/size 时保持老行为（返回数组）；带了就返回分页信封。"""
+        rows = [(key, STORE.meta.get(key, {}).get("roomtype", "standard")) for key in STORE.all()]
+        if "roomtype" in query:
+            rows = [row for row in rows if row[1] == query["roomtype"]]
+
+        if "page" not in query and "size" not in query:
+            return self._send(200, [{"bookingid": key} for key, _ in rows])
+
+        try:
+            page = int(query.get("page", "1"))
+            size = int(query.get("size", "10"))
+        except ValueError:
+            return self._send(400, {"error": "page 和 size 必须是整数"})
+        if page < 1:
+            return self._send(400, {"error": "page 从 1 开始"})
+        if not 1 <= size <= 100:
+            return self._send(400, {"error": "size 必须在 1 到 100 之间"})
+
+        start = (page - 1) * size
+        chunk = rows[start:start + size]
+        return self._send(200, {
+            "items": [{"bookingid": key} for key, _ in chunk],
+            "total": len(rows),
+            "page": page,
+            "size": size,
+        })
+
     def do_POST(self):
-        if self.path == "/auth":
+        path, query = self._route()
+        if path == "/auth":
             body = self._read_json() or {}
-            if body.get("username") == "admin" and body.get("password") == "password123":
-                return self._send(200, {"token": VALID_TOKEN})
+            user = USERS.get(str(body.get("username")))
+            if user and user["password"] == body.get("password"):
+                return self._send(200, {"token": user["token"], "role": user["role"]})
             return self._send(401, {"reason": "Bad credentials"})
-        if self.path == "/booking":
-            if not self._authorized():
-                return self._send(403, {"error": "forbidden"})
+        if path == "/booking":
+            if self._admin_only():
+                return
             body = self._read_json()
             error = validate(body)
             if error:
                 return self._send(400, {"error": error})
-            key = STORE.create(body)
+            roomtype = query.get("roomtype", "standard")
+            if roomtype not in ROOM_STOCK:
+                return self._send(400, {"error": f"未知房型 {roomtype}"})
+            if not STORE.reserve(roomtype):
+                return self._send(409, {"error": f"{roomtype} 房间已售罄"})
+            key = STORE.create(body, roomtype)
             return self._send(200, {"bookingid": key, "booking": body})
         return self._send(404, {"error": "no such route"})
 
     def do_PUT(self):
-        match = re.fullmatch(r"/booking/(\d+)", self.path)
+        path, _ = self._route()
+        match = re.fullmatch(r"/booking/(\d+)", path)
         if not match:
             return self._send(404, {"error": "no such route"})
-        if not self._authorized():
-            return self._send(403, {"error": "forbidden"})
+        if self._admin_only():
+            return
         key = int(match.group(1))
         with STORE.lock:
             exists = key in STORE.items
@@ -187,11 +289,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, body)
 
     def do_PATCH(self):
-        match = re.fullmatch(r"/booking/(\d+)", self.path)
+        path, _ = self._route()
+        match = re.fullmatch(r"/booking/(\d+)", path)
         if not match:
             return self._send(404, {"error": "no such route"})
-        if not self._authorized():
-            return self._send(403, {"error": "forbidden"})
+        if self._admin_only():
+            return
         key = int(match.group(1))
         with STORE.lock:
             current = STORE.items.get(key)
@@ -207,15 +310,17 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, merged)
 
     def do_DELETE(self):
-        match = re.fullmatch(r"/booking/(\d+)", self.path)
+        path, _ = self._route()
+        match = re.fullmatch(r"/booking/(\d+)", path)
         if not match:
             return self._send(404, {"error": "no such route"})
-        if not self._authorized():
-            return self._send(403, {"error": "forbidden"})
+        if self._admin_only():
+            return
         key = int(match.group(1))
         if not STORE.delete(key):
             return self._send(404, {"error": "not found"})
         return self._send(201, "Created")
+
 
 def start(port=0):
     """在后台线程起服务，返回 (server, base_url)。port=0 让系统分配空闲端口。"""

@@ -1,6 +1,6 @@
 # 软件测试可视化
 
-接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 67 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、契约规则、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率 / 失败现场留存）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 87 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率 / 失败现场留存）。
 
 配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（4 个缺陷的完整缺陷单）。
 
@@ -36,7 +36,10 @@ HTTP 000
 │   ├─ test_smoke.py       冒烟层（4 个）
 │   ├─ test_data_driven.py 数据驱动（7 个）
 │   ├─ test_contract.py    契约快照（2 个）
-│   ├─ test_schema.py      契约规则 / JSON Schema（7 个）
+│   ├─ test_schema.py      契约规则 / JSON Schema（8 个）
+│   ├─ test_roles.py       角色越权（6 个）
+│   ├─ test_pagination.py  分页与过滤（8 个）
+│   ├─ test_inventory.py   库存与超卖（5 个）
 │   └─ test_concurrency.py 并发安全与延迟（6 个）
 ├─ ui_tests/
 │   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文 + 失败截图
@@ -68,9 +71,9 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 67 items
+collected 87 items
 ...
-==================== 64 passed, 3 skipped in 2.60s ====================
+==================== 84 passed, 3 skipped in 2.60s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
@@ -91,10 +94,13 @@ python -m pytest ui_tests -q
 | CRUD | 创建返回 ID、创建后能查、出现在列表、PUT 全量更新、PATCH 只改指定字段、删除返回 201、删完 404、重复删除 404 |
 | 参数校验 | 缺字段、`depositpaid` 非布尔、`totalprice` 非数字或负数、日期格式非 ISO、非法日期、同日入住退房、闰日、`bookingdates` 缺键、查不存在的资源 404 |
 | 契约 | 字段类型快照（`contract.py`）+ JSON Schema 规则：必填、价格 ≥ 0、日期必须真实存在、不允许多余字段 |
+| 角色权限 | admin 可写、viewer 只读；viewer 的增/改/删都要 403，且数据不能被改动 |
+| 分页 | 首页 / 第二页 / 最后一页不满 / 越界页空列表 / size 非法（0、-1、101）/ 按房型过滤 |
+| 库存 | 下单扣库存、售罄 409、删除退还、10 线程抢 5 间房不超卖 |
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
 | UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 73 个用例其实只用了 57 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 93 个用例其实只用了 75 个测试函数。
 
 ## 几个值得注意的设计
 
@@ -112,7 +118,10 @@ python -m pytest ui_tests -q
 - [x] 零依赖 HTML 报告（`reports.py`）
 - [x] GitHub Actions 五关流水线（静态 → 冒烟 → 回归矩阵 → 覆盖率 → UI）
 - [x] 失败重试（`retry.py`，只给 flaky 用例开）
-- [x] 并发用例 + 零依赖语句覆盖率（92.8%）
+- [x] 并发用例 + 零依赖语句覆盖率（94.1%）
+- [x] 角色权限（admin / viewer）与越权用例
+- [x] 分页、过滤与边界用例
+- [x] 房间库存 + 并发超卖用例
 - [x] Playwright UI 层（`ui_tests/`，6 条主流程）
 - [x] 失败现场留存（截图 + trace，CI 自动上传 artifact）
 - [x] 测试方案 + 缺陷记录文档（`docs/`）
@@ -251,8 +260,8 @@ def test_第三方接口():
 
 ```
 被测文件: mock_server.py
-可执行行: 194    已覆盖: 180    覆盖率: 92.8%
-未覆盖的行: 89、123-124、229-238、242
+可执行行: 273    已覆盖: 257    覆盖率: 94.1%
+未覆盖的行: 82-83、134、168-169、334-343、347
 ```
 
 - **分母** = 编译后字节码里的可执行行（不是"文件共多少行"）；
@@ -372,7 +381,28 @@ allure serve allure-results      # 起服务并自动开浏览器
 
 **环境坑（已修复）**：机器 PATH 里曾有一条 2021 年 Oracle 残留的 `C:\Program Files\Common Files\Oracle\Java\javapath`，指向已删除的 JRE、又排在用户 PATH 前面，导致直接敲 `java -version` 会崩（0xC0000005）。已用管理员脚本 `D:\tools\fix-java-path.ps1` 删掉该条目，并把 `D:\tools\jdk-25.0.5+8\bin` 放到机器 PATH 首位（原 PATH 备份在 `D:\tools\machine-path-backup.txt`，可回滚）。**新开的窗口**里 `java -version` 已正常；已经开着的终端 / VS Code 要重启才能读到新 PATH。
 
-## 这个项目自己发现过四个问题
+### 14. 业务模型升级：角色 / 分页 / 库存
+
+只测 CRUD 练不出真本事，所以给 mock 加了三样真实系统才有的东西（纯标准库，无外部依赖）：
+
+| 能力 | 入口 | 关键行为 |
+|---|---|---|
+| 角色权限 | `POST /auth` 用 admin / viewer 两个账号 | admin 可写，viewer 只读；写操作越权返回 403 |
+| 分页与过滤 | `GET /booking?page=1&size=10&roomtype=limited` | 带 `page/size` 返回信封 `{items,total,page,size}`，不带则保持数组（向后兼容） |
+| 房间库存 | `GET /rooms`、`POST /booking?roomtype=limited` | 下单扣库存、售罄 409、删除退还 |
+
+**这三个能力各自撞出了一个真实缺陷**（详见 `docs/缺陷记录.md`）：
+
+- **越权**：admin 校验只写在了"创建"上，viewer 居然能 PUT / PATCH / DELETE → 测试抓红 → 四个写接口统一走 `_admin_only()`；
+- **超卖**：库存是"先查、再扣"两步，10 个线程抢 5 间房卖出了 9 间 → 改成锁内一次性 `reserve()`。
+
+超卖那条不是靠碰运气：mock 里用 10ms 模拟"查库存要访问数据库"的耗时，竞态窗口才真实存在；修完之后延迟去掉，套件仍然 3 秒内跑完。
+
+```powershell
+python -m pytest tests/test_roles.py tests/test_pagination.py tests/test_inventory.py -v
+```
+
+## 这个项目自己发现过六个问题
 
 写完数据驱动用例后，**测试立刻抓到 mock 服务的两个真实缺陷**：
 
@@ -388,11 +418,12 @@ allure serve allure-results      # 起服务并自动开浏览器
 第四个问题是补"等价类划分"时发现的：`totalprice` 只校验了类型没校验范围，**负数价格也能创建**。
 补用例 → 变红 → 加一行范围校验 → 变绿（详细过程见 `docs/缺陷记录.md` 的 BUG-004）。
 
+第五、六个问题是升级业务模型时撞出来的：**viewer 能删数据**（越权）和**10 人抢 5 间房卖出 9 间**（超卖）。前者是"校验写漏了一个接口"，后者是"锁只加了一半"，都是真实项目里最常见的两类错。
+
 **这就是测试的价值**——不是"证明代码是对的"，是"在它错的时候立刻知道"。
 
 ## 还能加什么
 
-- [ ] Allure 报告（要装 `allure-pytest` 和 Java 运行时）
 - [ ] 用 `pytest-xdist` 把用例并行跑（现在 3 秒，收益不大，属于扩展练习）
 - [ ] 把 `API_BASE_URL` 指向一个真实后端，验证"同一套用例换环境能跑"
 

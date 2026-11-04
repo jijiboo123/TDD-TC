@@ -88,6 +88,19 @@ def auth_headers(token):
 
 
 @pytest.fixture
+def viewer_token(base_url):
+    """只读账号：用它登录拿到的 token 只能查，不能写。"""
+    response = requests.post(f"{base_url}/auth", json={"username": "viewer", "password": "viewer123"})
+    assert response.status_code == 200, response.text
+    return response.json()["token"]
+
+
+@pytest.fixture
+def viewer_headers(viewer_token):
+    return {"Authorization": f"Bearer {viewer_token}"}
+
+
+@pytest.fixture
 def booking_payload():
     return {
         "firstname": "佳吉",
