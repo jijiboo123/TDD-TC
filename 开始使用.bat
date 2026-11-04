@@ -1,26 +1,13 @@
 @echo off
-rem ASCII-only launcher: cmd mangles UTF-8 Chinese in .bat files at codepage 936.
+rem ASCII-only launcher. The GUI is started through launch_gui.vbs so no console window stays open.
 cd /d "%~dp0"
-title Software Testing Visualizer
 
-where python >nul 2>nul
-if errorlevel 1 (
-  echo Python not found. Install Python 3.11+ and add it to PATH.
-  pause
-  exit /b 1
-)
-
-python -c "import tkinter" >nul 2>nul
-if errorlevel 1 (
-  echo tkinter is not available in this Python. Starting the console menu instead.
-  python start_menu.py
+if exist "launch_gui.vbs" (
+  wscript //nologo "launch_gui.vbs"
   exit /b 0
 )
 
+rem Fallback: run with console visible (helps when VBS is blocked by policy).
 python tester_gui.py
-if errorlevel 1 (
-  echo.
-  echo GUI exited with an error. Starting the console menu instead.
-  python start_menu.py
-)
+if errorlevel 1 pause
 exit /b 0
