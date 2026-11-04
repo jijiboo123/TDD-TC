@@ -53,3 +53,31 @@ def test_get_unknown_booking_returns_404(base_url):
 def test_update_unknown_booking_returns_404(base_url, auth_headers, booking_payload):
     response = requests.put(f"{base_url}/booking/999999", json=booking_payload, headers=auth_headers)
     assert response.status_code == 404
+
+
+# ---- 下面这几条是"等价类 + 边界值"补出来的，也是缺陷 4 的来源 ----
+
+def test_negative_price_is_rejected(base_url, auth_headers, booking_payload):
+    """价格是负数没有业务含义 —— 等价类里的"无效类：负数"必须有对应用例。"""
+    payload = {**booking_payload, "totalprice": -1}
+    response = _post(base_url, auth_headers, payload)
+    assert response.status_code == 400, f"负数价格竟然创建成功了：{response.text}"
+
+
+def test_same_day_checkin_and_checkout_is_rejected(base_url, auth_headers, booking_payload):
+    """边界值：入住日 == 退房日 = 住 0 晚，业务上不该成立。"""
+    payload = {**booking_payload, "bookingdates": {"checkin": "2026-11-10", "checkout": "2026-11-10"}}
+    assert _post(base_url, auth_headers, payload).status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("checkin", "checkout", "expect"),
+    [
+        ("2028-02-29", "2028-03-01", 200),   # 闰年：2 月 29 日存在
+        ("2026-02-29", "2026-03-01", 400),   # 平年：2 月 29 日不存在
+    ],
+)
+def test_leap_day_boundary(base_url, auth_headers, booking_payload, checkin, checkout, expect):
+    """边界值：日期的"存在性"靠 strptime 判断，闰年是最容易漏的边界。"""
+    payload = {**booking_payload, "bookingdates": {"checkin": checkin, "checkout": checkout}}
+    assert _post(base_url, auth_headers, payload).status_code == expect

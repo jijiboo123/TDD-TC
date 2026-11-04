@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>预订管理</title>
+  <style>
+    :root { --line: #d9dee5; --ink: #1f2937; --accent: #2563eb; --danger: #dc2626; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px; font: 15px/1.6 "Microsoft YaHei", system-ui, sans-serif; color: var(--ink); background: #f6f8fb; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    section { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    label { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: 13px; color: #4b5563; }
+    #login-panel, #create-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+    #message { flex-basis: 100%; }
+    input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px; }
+    input[type="number"] { width: 90px; }
+    button { padding: 6px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    button.secondary { background: #fff; color: var(--accent); }
+    button.danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+    th { color: #6b7280; font-weight: 600; }
+    #message { min-height: 22px; font-size: 13px; margin-top: 10px; }
+    #message.ok { color: #15803d; }
+    #message.error { color: var(--danger); }
+    #login-state { font-size: 13px; color: #6b7280; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <h1 id="page-title">预订管理</h1>
+
+  <section id="login-panel">
+    <label>用户名 <input id="username" value="admin" autocomplete="off"></label>
+    <label>密码 <input id="password" type="password" value="password123"></label>
+    <button id="login">登录</button>
+    <span id="login-state">未登录</span>
+  </section>
+
+  <section id="create-panel">
+    <label>名 <input id="firstname" placeholder="佳吉"></label>
+    <label>姓 <input id="lastname" placeholder="刘"></label>
+    <label>价格 <input id="totalprice" type="number" value="288"></label>
+    <label><input id="depositpaid" type="checkbox" checked> 已付押金</label>
+    <label>入住 <input id="checkin" type="date" value="2026-11-10"></label>
+    <label>退房 <input id="checkout" type="date" value="2026-11-12"></label>
+    <button id="create" disabled>创建预订</button>
+    <div id="message"></div>
+  </section>
+
+  <section>
+    <table id="bookings">
+      <thead>
+        <tr><th>ID</th><th>姓名</th><th>价格</th><th>操作</th></tr>
+      </thead>
+      <tbody id="booking-rows"></tbody>
+    </table>
+  </section>
+
+  <script>
+    const state = { token: null };
+    const rows = document.querySelector("#booking-rows");
+    const message = document.querySelector("#message");
+    const createButton = document.querySelector("#create");
+    const loginState = document.querySelector("#login-state");
+
+    function say(text, kind) {
+      message.textContent = text;
+      message.className = kind || "";
+    }
+
+    async function api(path, options) {
+      const init = options || {};
+      const headers = { "Content-Type": "application/json" };
+      if (state.token) headers.Authorization = "Bearer " + state.token;
+      const response = await fetch(path, { ...init, headers });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error((data && data.error) || ("请求失败：" + response.status));
+      }
+      return data;
+    }
+
+    function addCell(tr, text) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      tr.appendChild(td);
+      return td;
+    }
+
+    function renderRow(item, booking) {
+      const tr = document.createElement("tr");
+      tr.dataset.id = item.bookingid;
+      addCell(tr, String(item.bookingid));
+      addCell(tr, booking.firstname + " " + booking.lastname);
+      addCell(tr, String(booking.totalprice));
+
+      const actions = document.createElement("td");
+      const price = document.createElement("input");
+      price.className = "price-input";
+      price.type = "number";
+      price.value = booking.totalprice;
+      const save = document.createElement("button");
+      save.className = "secondary save-price";
+      save.dataset.id = item.bookingid;
+      save.textContent = "改价";
+      const remove = document.createElement("button");
+      remove.className = "danger delete";
+      remove.dataset.id = item.bookingid;
+      remove.textContent = "删除";
+      actions.append(price, save, remove);
+      tr.appendChild(actions);
+      return tr;
+    }
+
+    async function refresh() {
+      if (!state.token) return;
+      rows.replaceChildren();
+      try {
+        const list = await api("/booking");
+        for (const item of list) {
+          const booking = await api("/booking/" + item.bookingid);
+          rows.appendChild(renderRow(item, booking));
+        }
+      } catch (error) {
+        say(error.message, "error");
+      }
+    }
+
+    document.querySelector("#login").addEventListener("click", async () => {
+      try {
+        const body = JSON.stringify({
+          username: document.querySelector("#username").value,
+          password: document.querySelector("#password").value,
+        });
+        const data = await api("/auth", { method: "POST", body });
+        state.token = data.token;
+        loginState.textContent = "已登录";
+        createButton.disabled = false;
+        say("登录成功", "ok");
+        await refresh();
+      } catch (error) {
+        say(error.message, "error");
+      }
+    });
+
+    createButton.addEventListener("click", async () => {
+      const payload = {
+        firstname: document.querySelector("#firstname").value,
+        lastname: document.querySelector("#lastname").value,
+        totalprice: Number(document.querySelector("#totalprice").value),
+        depositpaid: document.querySelector("#depositpaid").checked,
+        bookingdates: {
+          checkin: document.querySelector("#checkin").value,
+          checkout: document.querySelector("#checkout").value,
+        },
+      };
+      try {
+        await api("/booking", { method: "POST", body: JSON.stringify(payload) });
+        say("创建成功", "ok");
+        await refresh();
+      } catch (error) {
+        say(error.message, "error");
+      }
+    });
+
+    rows.addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const id = button.dataset.id;
+      const row = button.closest("tr");
+      const price = row.querySelector(".price-input").value;
+      try {
+        if (button.classList.contains("save-price")) {
+          await api("/booking/" + id, { method: "PATCH", body: JSON.stringify({ totalprice: Number(price) }) });
+          say("价格已保存", "ok");
+        } else if (button.classList.contains("delete")) {
+          await api("/booking/" + id, { method: "DELETE" });
+          say("已删除", "ok");
+        }
+        await refresh();
+      } catch (error) {
+        say(error.message, "error");
+      }
+    });
+  </script>
+</body>
+</html>

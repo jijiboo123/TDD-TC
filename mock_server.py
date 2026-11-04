@@ -12,6 +12,7 @@
 import argparse
 import json
 from datetime import datetime
+import os
 import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -83,6 +84,9 @@ def validate(body):
         return "depositpaid 必须是布尔值"
     if not isinstance(body.get("totalprice"), (int, float)):
         return "totalprice 必须是数字"
+    # 负数价格没有业务含义（等价类里"无效类：负数"漏测，被补的用例抓到）
+    if body["totalprice"] < 0:
+        return "totalprice 不能是负数"
     return None
 
 
@@ -110,6 +114,20 @@ class Handler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
 
+    def _send_page(self):
+        """把 web/index.html 发给浏览器 —— UI 层用例就是点这个页面。"""
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
+        try:
+            with open(path, "rb") as handle:
+                body = handle.read()
+        except OSError:
+            return self._send(404, {"error": "页面文件缺失：web/index.html"})
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _authorized(self):
         """两种写法都认：Authorization: Bearer xxx 或 Cookie: token=xxx"""
         auth = self.headers.get("Authorization") or ""
@@ -120,6 +138,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- 路由 ----
     def do_GET(self):
+        if self.path == "/":
+            return self._send_page()
         if self.path == "/ping":
             return self._send(200, "pong")
         if self.path == "/booking":

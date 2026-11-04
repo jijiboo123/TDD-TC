@@ -83,10 +83,30 @@ jobs:
             report.html
           if-no-files-found: ignore
 
-  # ---------- 第 4 关：汇总（任一关失败则整体红）----------
+  # ---------- 第 4 关：UI 层（Playwright 点真页面）----------
+  ui:
+    name: UI 层 (Playwright)
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: 安装接口依赖
+        run: pip install -r requirements.txt
+      - name: 安装 UI 依赖与 Chromium
+        run: |
+          pip install -r requirements-ui.txt
+          python -m playwright install --with-deps chromium
+      - name: 跑 UI 用例
+        run: python -m pytest ui_tests -q
+
+  # ---------- 第 5 关：汇总（任一关失败则整体红）----------
   gate:
     name: 结果汇总
-    needs: [lint, smoke, regression]
+    needs: [lint, smoke, regression, ui]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -95,9 +115,11 @@ jobs:
           echo "lint=${{ needs.lint.result }}"
           echo "smoke=${{ needs.smoke.result }}"
           echo "regression=${{ needs.regression.result }}"
+          echo "ui=${{ needs.ui.result }}"
           if [ "${{ needs.lint.result }}" != "success" ] || \
              [ "${{ needs.smoke.result }}" != "success" ] || \
-             [ "${{ needs.regression.result }}" != "success" ]; then
+             [ "${{ needs.regression.result }}" != "success" ] || \
+             [ "${{ needs.ui.result }}" != "success" ]; then
             echo "::error::流水线未通过"
             exit 1
           fi

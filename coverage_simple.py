@@ -79,7 +79,8 @@ def scenario(base_url):
     }
     json_type = {"Content-Type": "application/json"}
 
-    # 健康检查与查询
+    # 健康检查、首页、查询
+    requests.get(f"{base_url}/")
     requests.get(f"{base_url}/ping")
     requests.get(f"{base_url}/booking")
     requests.get(f"{base_url}/booking/999")               # 查不到

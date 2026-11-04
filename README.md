@@ -1,6 +1,8 @@
 # 软件测试可视化
 
-接口自动化测试练习项目：**pytest + requests**，56 个用例，覆盖正常流程、异常边界、并发安全，并自带零依赖的指标工具（报告 / 覆盖率）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 60 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率）。
+
+配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（4 个缺陷的完整缺陷单）。
 
 ## 为什么自带一个 mock 服务
 
@@ -29,17 +31,25 @@ HTTP 000
 │   ├─ test_health.py      健康检查与路由（5 个）
 │   ├─ test_auth.py        鉴权（6 个）
 │   ├─ test_crud.py        增删改查主流程（9 个）
-│   ├─ test_validation.py  参数校验与边界（14 个）
+│   ├─ test_validation.py  参数校验与边界（18 个）
 │   ├─ test_smoke.py       冒烟层（4 个）
 │   ├─ test_data_driven.py 数据驱动（7 个）
 │   ├─ test_contract.py    契约快照（2 个）
 │   └─ test_concurrency.py 并发安全与延迟（6 个）
+├─ ui_tests/
+│   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文
+│   └─ test_booking_ui.py  UI 主流程（6 个）
+├─ web/index.html          管理页面（登录 / 新建 / 改价 / 删除）
+├─ docs/
+│   ├─ 测试方案.md          范围、策略、等价类/边界值/判定表、用例清单
+│   └─ 缺陷记录.md          4 个缺陷的标准缺陷单
 ├─ data/booking_cases.json 数据驱动用例表
 ├─ snapshots/              契约快照
 ├─ examples/               演示用的"偶发失败"用例（默认不跑）
 ├─ pytest.ini
-├─ requirements.txt
-└─ 运行测试.bat / 一键测试.bat
+├─ requirements.txt        接口层依赖
+├─ requirements-ui.txt     UI 层依赖（playwright）
+└─ 运行测试.bat / 运行UI测试.bat / 一键测试.bat
 ```
 
 ## 跑起来
@@ -54,12 +64,19 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 56 items
+collected 60 items
 ...
-==================== 53 passed, 3 skipped in 2.60s ====================
+==================== 57 passed, 3 skipped in 2.60s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
+
+UI 层要另装浏览器，单独跑：
+
+```
+python -m pytest ui_tests -q
+6 passed in 2.55s
+```
 
 ## 覆盖了什么
 
@@ -68,10 +85,11 @@ collected 56 items
 | 健康检查 | ping 通不通、返回体、Content-Type、未知路由 404 |
 | 鉴权 | 正确凭据换 token、错误密码 401、缺 token / 错 token 403 |
 | CRUD | 创建返回 ID、创建后能查、出现在列表、PUT 全量更新、PATCH 只改指定字段、删除返回 201、删完 404、重复删除 404 |
-| 参数校验 | 缺字段、`depositpaid` 非布尔、`totalprice` 非数字、日期格式非 ISO、`bookingdates` 缺键、查不存在的资源 404 |
+| 参数校验 | 缺字段、`depositpaid` 非布尔、`totalprice` 非数字或负数、日期格式非 ISO、非法日期、同日入住退房、闰日、`bookingdates` 缺键、查不存在的资源 404 |
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
+| UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 56 个用例其实只用了 41 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 66 个用例其实只用了 50 个测试函数。
 
 ## 几个值得注意的设计
 
@@ -86,11 +104,12 @@ collected 56 items
 - [x] 数据驱动用例（`data/booking_cases.json`）
 - [x] 契约快照（字段类型变了就红）
 - [x] 零依赖 HTML 报告（`reports.py`）
-- [x] GitHub Actions 四关流水线
+- [x] GitHub Actions 五关流水线（静态 → 冒烟 → 回归矩阵 → 覆盖率 → UI）
 - [x] 失败重试（`retry.py`，只给 flaky 用例开）
-- [x] 并发用例 + 零依赖语句覆盖率（93.8%）
+- [x] 并发用例 + 零依赖语句覆盖率（92.8%）
+- [x] Playwright UI 层（`ui_tests/`，6 条主流程）
+- [x] 测试方案 + 缺陷记录文档（`docs/`）
 - [ ] Allure 报告（要装 `allure-pytest` + Java 运行时）
-- [ ] Playwright 补 UI 层（要下载浏览器，约 300MB）
 
 ## License
 
@@ -225,17 +244,42 @@ def test_第三方接口():
 
 ```
 被测文件: mock_server.py
-可执行行: 177    已覆盖: 166    覆盖率: 93.8%
-未覆盖的行: 209-218、222
+可执行行: 194    已覆盖: 180    覆盖率: 92.8%
+未覆盖的行: 89、123-124、229-238、242
 ```
 
 - **分母** = 编译后字节码里的可执行行（不是"文件共多少行"）；
 - **分子** = 跑完接口场景后真正执行过的行；
-- 剩下的 `209-218` 是命令行入口 `main()`，只有直接 `python mock_server.py` 才走。
+- `123-124` 是"页面文件缺失"的兜底分支，`229-238` 是命令行入口 `main()`，都属于正常走不到的行。
 
 CI 里带 `--min 90`，覆盖率掉下去流水线直接红。
 
-## 这个项目自己发现过三个问题
+### 11. UI 层（Playwright）
+
+接口通了不代表用户能用——按钮没绑事件、字段渲染错位，接口测试一个都发现不了。
+所以给 mock 配了一个管理页面 `web/index.html`（原生 HTML + JS，无构建步骤），
+再用 Playwright 从浏览器里点它：
+
+![预订管理页面](docs/ui-page.png)
+
+```bash
+pip install -r requirements-ui.txt      # 装 playwright
+python -m playwright install chromium   # 下载浏览器（约 300MB，只需一次）
+python -m pytest ui_tests -v
+```
+
+用例覆盖：页面加载（未登录时创建按钮禁用）→ 登录解锁 → 创建后列表出现 →
+空名字提交显示后端错误 → 改价生效 → 删除后行消失。
+
+**两个关键写法**
+
+1. **自动等待**：用 `expect(locator).to_have_text(...)` 而不是 `assert page.text_content(...)`——
+   `expect` 会轮询到超时，页面还没渲染完也不会误报，不用写 `time.sleep`。
+2. **每个用例独立 context**：cookie / 存储隔离，用例之间不会串登录态。
+
+> UI 用例放在 `ui_tests/` 而不是 `tests/`：默认 `pytest` 不加载浏览器，没装 Playwright 的机器照样能跑接口用例。CI 里 UI 是单独一关（第 4 关）。
+
+## 这个项目自己发现过四个问题
 
 写完数据驱动用例后，**测试立刻抓到 mock 服务的两个真实缺陷**：
 
@@ -248,11 +292,14 @@ CI 里带 `--min 90`，覆盖率掉下去流水线直接红。
 
 第三个问题是写并发用例时审出来的：`do_DELETE` 里"先查在不在、再删"不是原子操作（见第 9 节），已经改成一把锁里完成。
 
+第四个问题是补"等价类划分"时发现的：`totalprice` 只校验了类型没校验范围，**负数价格也能创建**。
+补用例 → 变红 → 加一行范围校验 → 变绿（详细过程见 `docs/缺陷记录.md` 的 BUG-004）。
+
 **这就是测试的价值**——不是"证明代码是对的"，是"在它错的时候立刻知道"。
 
 ## 还能加什么
 
-- [ ] Playwright 补 UI 层（要下载浏览器，适合本机装好后再加）
 - [ ] Allure 报告（要装 `allure-pytest` 和 Java 运行时）
-- [ ] 用 `pytest-xdist` 把 56 个用例并行跑（现在 2.6 秒，收益不大，属于扩展练习）
+- [ ] 用 `pytest-xdist` 把用例并行跑（现在 3 秒，收益不大，属于扩展练习）
+- [ ] 把 `API_BASE_URL` 指向一个真实后端，验证"同一套用例换环境能跑"
 

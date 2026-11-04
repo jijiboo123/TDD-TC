@@ -1,0 +1,2 @@
+# UI 层（Playwright）的额外依赖，只有跑 ui_tests 时才需要
+playwright>=1.40
