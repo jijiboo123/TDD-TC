@@ -5,6 +5,7 @@ allure-results/
 .venv/
 report.xml
 report.html
+artifacts/
 
 
 report.html

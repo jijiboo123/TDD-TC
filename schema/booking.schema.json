@@ -1,0 +1,21 @@
+{
+  "$comment": "单条预订：5 个字段全必填、类型固定，日期必须是真实存在的 YYYY-MM-DD",
+  "type": "object",
+  "required": ["firstname", "lastname", "totalprice", "depositpaid", "bookingdates"],
+  "properties": {
+    "firstname": { "type": "string", "minLength": 1 },
+    "lastname": { "type": "string", "minLength": 1 },
+    "totalprice": { "type": "number", "minimum": 0 },
+    "depositpaid": { "type": "boolean" },
+    "bookingdates": {
+      "type": "object",
+      "required": ["checkin", "checkout"],
+      "properties": {
+        "checkin": { "type": "string", "format": "date" },
+        "checkout": { "type": "string", "format": "date" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

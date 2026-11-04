@@ -1,6 +1,6 @@
 # 软件测试可视化
 
-接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 60 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 67 个用例、UI 6 个用例，覆盖正常流程、异常边界、并发安全、契约规则、浏览器端主流程，并自带零依赖的指标工具（报告 / 覆盖率 / 失败现场留存）。
 
 配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（4 个缺陷的完整缺陷单）。
 
@@ -25,6 +25,7 @@ HTTP 000
 ├─ coverage_simple.py      语句覆盖率（零依赖，sys.settrace）
 ├─ assertions.py           失败信息更清楚的断言库
 ├─ contract.py             生成 / 比对契约快照
+├─ schema_validator.py     JSON Schema 校验（零依赖，规则级契约）
 ├─ reports.py              report.xml → 自包含 HTML 报告
 ├─ scanner.py              图形化体检器（静态检查 + 跑测试）
 ├─ tests/
@@ -35,11 +36,14 @@ HTTP 000
 │   ├─ test_smoke.py       冒烟层（4 个）
 │   ├─ test_data_driven.py 数据驱动（7 个）
 │   ├─ test_contract.py    契约快照（2 个）
+│   ├─ test_schema.py      契约规则 / JSON Schema（7 个）
 │   └─ test_concurrency.py 并发安全与延迟（6 个）
 ├─ ui_tests/
-│   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文
+│   ├─ conftest.py         Playwright 夹具：浏览器 + 独立上下文 + 失败截图
 │   └─ test_booking_ui.py  UI 主流程（6 个）
 ├─ web/index.html          管理页面（登录 / 新建 / 改价 / 删除）
+├─ schema/                 契约规则（JSON Schema，4 份）
+├─ artifacts/              失败现场（截图 / trace），不进版本库
 ├─ docs/
 │   ├─ 测试方案.md          范围、策略、等价类/边界值/判定表、用例清单
 │   └─ 缺陷记录.md          4 个缺陷的标准缺陷单
@@ -64,9 +68,9 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 60 items
+collected 67 items
 ...
-==================== 57 passed, 3 skipped in 2.60s ====================
+==================== 64 passed, 3 skipped in 2.60s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
@@ -86,10 +90,11 @@ python -m pytest ui_tests -q
 | 鉴权 | 正确凭据换 token、错误密码 401、缺 token / 错 token 403 |
 | CRUD | 创建返回 ID、创建后能查、出现在列表、PUT 全量更新、PATCH 只改指定字段、删除返回 201、删完 404、重复删除 404 |
 | 参数校验 | 缺字段、`depositpaid` 非布尔、`totalprice` 非数字或负数、日期格式非 ISO、非法日期、同日入住退房、闰日、`bookingdates` 缺键、查不存在的资源 404 |
+| 契约 | 字段类型快照（`contract.py`）+ JSON Schema 规则：必填、价格 ≥ 0、日期必须真实存在、不允许多余字段 |
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
 | UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 66 个用例其实只用了 50 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 73 个用例其实只用了 57 个测试函数。
 
 ## 几个值得注意的设计
 
@@ -103,13 +108,15 @@ python -m pytest ui_tests -q
 - [x] 本地 mock 服务 + 分层用例（冒烟 / 回归）
 - [x] 数据驱动用例（`data/booking_cases.json`）
 - [x] 契约快照（字段类型变了就红）
+- [x] JSON Schema 规则契约（必填 / 范围 / 真实日期，零依赖校验器）
 - [x] 零依赖 HTML 报告（`reports.py`）
 - [x] GitHub Actions 五关流水线（静态 → 冒烟 → 回归矩阵 → 覆盖率 → UI）
 - [x] 失败重试（`retry.py`，只给 flaky 用例开）
 - [x] 并发用例 + 零依赖语句覆盖率（92.8%）
 - [x] Playwright UI 层（`ui_tests/`，6 条主流程）
+- [x] 失败现场留存（截图 + trace，CI 自动上传 artifact）
 - [x] 测试方案 + 缺陷记录文档（`docs/`）
-- [ ] Allure 报告（要装 `allure-pytest` + Java 运行时）
+- [ ] Allure 报告（要装 `allure-pytest` + Java 运行时；本机 java.exe 启动即崩，暂缓）
 
 ## License
 
@@ -283,7 +290,50 @@ python -m pytest ui_tests -v
    `expect` 会轮询到超时，页面还没渲染完也不会误报，不用写 `time.sleep`。
 2. **每个用例独立 context**：cookie / 存储隔离，用例之间不会串登录态。
 
+**失败时自动留证据**：用例红了会往 `artifacts/ui/` 写两样东西——
+
+```
+artifacts/ui/test_change_price_updates_the_row-20261104-194148.png   失败瞬间整页截图
+artifacts/ui/test_change_price_updates_the_row-20261104-194148.zip   Playwright trace
+```
+
+截图能直接看出"卡在哪个状态"，trace 可以逐步回放：
+
+```bash
+python -m playwright show-trace artifacts/ui/xxx.zip
+```
+
+CI 里 UI 关失败时会把这个目录作为 artifact 上传，不用在本机复现。
+
 > UI 用例放在 `ui_tests/` 而不是 `tests/`：默认 `pytest` 不加载浏览器，没装 Playwright 的机器照样能跑接口用例。CI 里 UI 是单独一关（第 4 关）。
+
+### 12. 契约升级：JSON Schema（零依赖）
+
+`contract.py` 的快照只能证明"结构没变"，管不了"值合不合法"——`totalprice: -1` 类型仍是数字，快照照样通过。
+`schema_validator.py` 补上规则级契约，用 4 份 schema 描述"什么样的响应才算合法"：
+
+| schema | 管什么 |
+|---|---|
+| `booking.schema.json` | 5 个字段必填、价格 ≥ 0、日期必须是真实存在的 YYYY-MM-DD、不许多字段 |
+| `booking_created.schema.json` | `bookingid` 为正整数 + `booking` 复用上面的定义（`$ref`） |
+| `booking_list.schema.json` | 数组，每项只有 `bookingid` |
+| `error.schema.json` | 错误响应必须有非空 `error` 字段 |
+
+```bash
+python -m pytest tests/test_schema.py -v
+```
+
+校验器只有 100 多行，支持 `type / required / properties / items / enum / minimum / maximum / minLength / format(date) / $ref`，
+报错会一次性列出所有问题：
+
+```
+SchemaError: 契约不符：
+  - 创建响应.booking.totalprice: 不能小于 0，实际 -1
+  - 创建响应.booking.bookingdates.checkin: 不是真实存在的日期，实际 '2026-13-45'
+```
+
+**为什么自己写而不用 jsonschema 包**：这个项目坚持"不装包也能跑"，而且校验器本身也当教学材料——
+面试被问"什么是契约测试"时，能说清快照和规则的区别，比背定义强。
 
 ## 这个项目自己发现过四个问题
 

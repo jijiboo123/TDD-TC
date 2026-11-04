@@ -1,0 +1,10 @@
+{
+  "$comment": "创建预订的响应：bookingid + 回显的 booking（复用 booking.schema.json）",
+  "type": "object",
+  "required": ["bookingid", "booking"],
+  "properties": {
+    "bookingid": { "type": "integer", "minimum": 1 },
+    "booking": { "$ref": "booking.schema.json" }
+  },
+  "additionalProperties": false
+}

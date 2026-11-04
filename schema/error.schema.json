@@ -1,0 +1,9 @@
+{
+  "$comment": "错误响应：必须有一个非空的 error 字段（401 的 reason 不在这个契约里）",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

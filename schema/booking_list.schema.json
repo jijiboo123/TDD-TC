@@ -1,0 +1,12 @@
+{
+  "$comment": "预订列表：数组，每项只有 bookingid",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["bookingid"],
+    "properties": {
+      "bookingid": { "type": "integer", "minimum": 1 }
+    },
+    "additionalProperties": false
+  }
+}

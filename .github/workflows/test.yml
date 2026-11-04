@@ -102,6 +102,13 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: 跑 UI 用例
         run: python -m pytest ui_tests -q
+      - name: 失败时留存截图与 trace
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-artifacts
+          path: artifacts/
+          if-no-files-found: ignore
 
   # ---------- 第 5 关：汇总（任一关失败则整体红）----------
   gate:
