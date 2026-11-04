@@ -1,7 +1,6 @@
 @echo off
-chcp 65001 >nul
+rem ASCII-only: cmd mangles UTF-8 Chinese batch files when console codepage is 936.
 cd /d "%~dp0"
-echo ==== 接口测试（pytest）====
 python -m pytest
-echo.
 pause
+exit /b 0

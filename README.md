@@ -18,6 +18,10 @@
 
 也可以直接双击项目根目录的 **`开始使用.bat`**。
 
+> 所有 `.bat` 都是**纯 ASCII 启动器**，只负责调用 Python 脚本；中文提示由 Python 输出。
+> 原因是 cmd 会用控制台代码页（936）读取批处理，UTF-8 中文一旦跨读取缓冲区就会裂开，
+> 出现"半行被当成命令执行"的怪错——这个坑 v1.0.2 已经踩过并修掉。
+
 **换一台电脑时**按这个顺序：
 
 1. `pip install -r requirements.txt`
@@ -45,7 +49,8 @@ HTTP 000
 ├─ mock_server.py          本地 API（只用标准库，线程安全）
 ├─ conftest.py             pytest 夹具：起服务、鉴权、造数据、清数据
 ├─ check_env.py            环境自检（Python / 依赖 / 浏览器 / Java）
-├─ 开始使用.bat            一键控制台菜单（9 个入口 + 退出）
+├─ start_menu.py           控制台菜单逻辑（中文由 Python 输出，避免 bat 乱码）
+├─ 开始使用.bat            启动器（纯 ASCII，只负责调 start_menu.py）
 ├─ retry.py                失败重试插件（零依赖，给 flaky 用例用）
 ├─ coverage_simple.py      语句覆盖率（零依赖，sys.settrace）
 ├─ perf_load.py            性能基线（并发梯度 + p50/p95/p99，零依赖）
