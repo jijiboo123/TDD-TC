@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
-"""软件体检器 · 图形界面
+"""软件测试可视化 · 主页面（图形界面）
 
-用法：双击运行（或 python tester_gui.py），选一个软件文件夹，点「开始体检」。
+打开后自动做三件事：
+  1. 环境自检（Python / 依赖 / 浏览器 / Java），结果直接显示在顶部；
+  2. 让你选择要检测的软件：整个文件夹，或者单个 .py 文件；
+  3. 体检结果按级别列出来，可一键生成 HTML 报告。
+
+用法：双击 `开始使用.bat`，或 python tester_gui.py
+自检（不显示窗口）：python tester_gui.py --selftest
 """
 
+import argparse
+import subprocess
+import sys
 import threading
 import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+import check_env
 import reports as reporter
 import scanner
 
-COLOR = {"高": "#d9534f", "中": "#e0a13c", "低": "#4c8dff"}
+ROOT = Path(__file__).resolve().parent
+COLOR = {"高": "#d9534f", "中": "#e0a13c", "低": "#4c8dff", "ok": "#2e7d32", "warn": "#e0a13c", "bad": "#c62828"}
 
 
 class App:
@@ -22,40 +33,74 @@ class App:
         self.findings = []
         self.info = {}
         self.test_result = {}
-        root.title("软件测试可视化")
-        root.geometry("1120x720")
-        root.minsize(900, 600)
 
-        self.folder = tk.StringVar(value="")
-        self.status = tk.StringVar(value="选择一个软件文件夹，然后点「开始体检」")
+        root.title("软件测试可视化 · 主页面")
+        root.geometry("1180x760")
+        root.minsize(960, 640)
 
-        self._build_top()
+        self.target = tk.StringVar(value="")
+        self.status = tk.StringVar(value="选一个文件夹或 .py 文件，点「开始体检」")
+        self.env_text = tk.StringVar(value="正在检测环境…")
+
+        self._build_header()
+        self._build_env()
+        self._build_target()
+        self._build_support()
         self._build_table()
         self._build_bottom()
 
-    def _build_top(self):
-        bar = ttk.Frame(self.root, padding=(12, 12, 12, 6))
+        self.root.after(150, self.check_env_async)
+
+    # ---------------- 界面 ----------------
+    def _build_header(self):
+        bar = ttk.Frame(self.root, padding=(14, 12, 14, 4))
         bar.pack(fill="x")
-        ttk.Label(bar, text="软件文件夹").pack(side="left")
-        ttk.Entry(bar, textvariable=self.folder, width=62).pack(side="left", padx=6)
-        ttk.Button(bar, text="浏览…", command=self.pick).pack(side="left")
-        self.btn_scan = ttk.Button(bar, text="开始体检", command=self.start)
+        ttk.Label(bar, text="软件测试可视化", font=("Microsoft YaHei", 16, "bold")).pack(side="left")
+        ttk.Label(bar, text="  环境自检 → 选被测项目 → 开始体检", foreground="#6b7280").pack(side="left")
+
+    def _build_env(self):
+        box = ttk.LabelFrame(self.root, text=" 环境状态 ", padding=(10, 6))
+        box.pack(fill="x", padx=14, pady=6)
+        self.env_label = ttk.Label(box, textvariable=self.env_text, foreground="#6b7280")
+        self.env_label.pack(side="left", fill="x", expand=True)
+        ttk.Button(box, text="重新检测", command=self.check_env_async).pack(side="right")
+
+    def _build_target(self):
+        box = ttk.LabelFrame(self.root, text=" 被测项目 ", padding=(10, 8))
+        box.pack(fill="x", padx=14, pady=6)
+        row = ttk.Frame(box)
+        row.pack(fill="x")
+        ttk.Label(row, text="路径").pack(side="left")
+        ttk.Entry(row, textvariable=self.target).pack(side="left", fill="x", expand=True, padx=6)
+        ttk.Button(row, text="选文件夹…", command=self.pick_folder).pack(side="left")
+        ttk.Button(row, text="选 .py 文件…", command=self.pick_file).pack(side="left", padx=4)
+        self.btn_scan = ttk.Button(row, text="开始体检", command=self.start)
         self.btn_scan.pack(side="left", padx=8)
         self.run_tests = tk.BooleanVar(value=True)
-        ttk.Checkbutton(bar, text="同时跑项目自带测试",
-                        variable=self.run_tests).pack(side="left", padx=6)
+        ttk.Checkbutton(row, text="同时跑项目自带测试", variable=self.run_tests).pack(side="left")
+
+    def _build_support(self):
+        box = ttk.LabelFrame(self.root, text=" 能检测哪些文件 ", padding=(10, 6))
+        box.pack(fill="x", padx=14, pady=4)
+        for name, detail in scanner.SUPPORTED.items():
+            line = ttk.Frame(box)
+            line.pack(fill="x", anchor="w")
+            ttk.Label(line, text=f"✓ {name}", foreground=COLOR["ok"], width=22).pack(side="left")
+            ttk.Label(line, text=detail, foreground="#4b5563", wraplength=900, justify="left").pack(side="left", fill="x")
+        ttk.Label(box, text=f"✗ {scanner.UNSUPPORTED}", foreground="#9ca3af").pack(anchor="w", pady=(4, 0))
 
     def _build_table(self):
-        box = ttk.Frame(self.root, padding=(12, 0, 12, 0))
+        box = ttk.Frame(self.root, padding=(14, 4, 14, 0))
         box.pack(fill="both", expand=True)
-        cols = (("sev", "级别", 60), ("loc", "位置", 240), ("kind", "类型", 130),
+        cols = (("sev", "级别", 60), ("loc", "位置", 250), ("kind", "类型", 130),
                 ("detail", "问题", 380), ("advice", "建议", 380))
-        self.tree = ttk.Treeview(box, columns=[c[0] for c in cols], show="headings", height=18)
+        self.tree = ttk.Treeview(box, columns=[c[0] for c in cols], show="headings", height=14)
         for key, title, width in cols:
             self.tree.heading(key, text=title)
             self.tree.column(key, width=width, anchor="w")
         for level, color in COLOR.items():
-            self.tree.tag_configure(level, foreground=color)
+            if level in ("高", "中", "低"):
+                self.tree.tag_configure(level, foreground=color)
         self.tree.pack(side="left", fill="both", expand=True)
         scroll = ttk.Scrollbar(box, orient="vertical", command=self.tree.yview)
         scroll.pack(side="right", fill="y")
@@ -63,41 +108,86 @@ class App:
         self.tree.bind("<Double-1>", self.open_file)
 
     def _build_bottom(self):
-        bar = ttk.Frame(self.root, padding=(12, 8, 12, 12))
+        bar = ttk.Frame(self.root, padding=(14, 8, 14, 12))
         bar.pack(fill="x")
-        self.stats = ttk.Label(bar, textvariable=self.status, foreground="#2c3e50")
-        self.stats.pack(side="left")
+        ttk.Label(bar, textvariable=self.status, foreground="#2c3e50").pack(side="left")
         ttk.Button(bar, text="生成 HTML 报告", command=self.make_report).pack(side="right")
-    # ---------- 交互 ----------
-    def pick(self):
+        ttk.Button(bar, text="打开控制台菜单", command=self.open_console_menu).pack(side="right", padx=6)
+
+    # ---------------- 环境自检 ----------------
+    def check_env_async(self):
+        self.env_text.set("正在检测环境…")
+        self.env_label.configure(foreground="#6b7280")
+        threading.Thread(target=self._env_worker, daemon=True).start()
+
+    def _env_worker(self):
+        try:
+            status = check_env.collect_status()
+        except Exception as error:          # 界面不能因为自检崩溃
+            self.root.after(0, lambda err=error: self._env_failed(err))
+            return
+        self.root.after(0, lambda data=status: self._env_done(data))
+
+    def _env_failed(self, error):
+        self.env_text.set(f"环境自检失败：{error}")
+        self.env_label.configure(foreground=COLOR["bad"])
+
+    def _env_done(self, status):
+        parts = [
+            f"Python {status['python']} {'✓' if status['python_ok'] else '✗'}",
+            f"pytest {'✓' if status['modules']['pytest'] else '✗'}",
+            f"UI {'✓' if status['modules']['playwright'] and status['chromium'] else '✗'}",
+            f"Allure {'✓' if status['java_ok'] and status['allure'] else '✗'}",
+        ]
+        if status["problems"]:
+            mark = "⚠ " if status["core_ok"] else "✗ "
+            text = mark + " · ".join(parts) + "  —— " + "；".join(status["problems"])
+            self.env_label.configure(foreground=COLOR["warn"] if status["core_ok"] else COLOR["bad"])
+        else:
+            text = " · ".join(parts) + "  —— 全部就绪"
+            self.env_label.configure(foreground=COLOR["ok"])
+        self.env_text.set(text)
+
+    # ---------------- 选目标 / 体检 ----------------
+    def pick_folder(self):
         chosen = filedialog.askdirectory(title="选择要体检的软件文件夹")
         if chosen:
-            self.folder.set(chosen)
+            self.target.set(chosen)
+
+    def pick_file(self):
+        chosen = filedialog.askopenfilename(
+            title="选择要体检的 Python 文件",
+            filetypes=[("Python 源码", "*.py"), ("所有文件", "*.*")],
+        )
+        if chosen:
+            self.target.set(chosen)
 
     def start(self):
-        target = self.folder.get().strip()
+        target = self.target.get().strip()
         if not target:
-            messagebox.showinfo("还没选文件夹", "先点「浏览…」选一个软件目录。")
+            messagebox.showinfo("还没选目标", "先选一个文件夹或 .py 文件。")
             return
-        if not Path(target).is_dir():
+        path = Path(target)
+        if not path.exists():
             messagebox.showerror("路径不存在", target)
+            return
+        if path.is_file() and path.suffix.lower() != ".py":
+            messagebox.showerror("暂不支持", f"{path.suffix or '无后缀'} 文件暂不支持，目前只解析 .py。")
             return
         self.btn_scan.config(state="disabled")
         self.status.set("正在扫描…")
-        self.root.update()
-        threading.Thread(target=self._scan_worker, args=(target, self.run_tests.get()), daemon=True).start()
+        threading.Thread(target=self._scan_worker, args=(str(path), self.run_tests.get()), daemon=True).start()
 
     def _scan_worker(self, target, with_tests):
         try:
             findings, info, test_result = scanner.collect(target, with_tests=with_tests)
             self.root.after(0, lambda: self._show(findings, info, test_result))
-        except Exception as err:  # noqa: BLE001 - 界面不能因为一个坏项目崩掉
-            # err 在 except 结束时会被删掉，lambda 里要绑到底包参数上，否则回调执行时 NameError
-            self.root.after(0, lambda error=err: self._fail(error))
+        except Exception as error:           # 坏项目不能把界面带崩
+            self.root.after(0, lambda err=error: self._fail(err))
 
-    def _fail(self, err):
+    def _fail(self, error):
         self.btn_scan.config(state="normal")
-        self.status.set(f"扫描失败：{err}")
+        self.status.set(f"扫描失败：{error}")
 
     def _show(self, findings, info, test_result):
         self.findings, self.info, self.test_result = findings, info, test_result
@@ -107,13 +197,14 @@ class App:
             self.tree.insert("", "end", values=(
                 item.severity, f"{item.path}:{item.line}", item.kind, item.detail, item.advice,
             ), tags=(item.severity,))
-        counts = {level: sum(1 for x in findings if x.severity == level) for level in COLOR}
+        counts = {level: sum(1 for x in findings if x.severity == level) for level in ("高", "中", "低")}
+        scope = f"单文件 {info.get('target_file')}" if info.get("target_file") else f"{info['python_files']} 个 Python 文件"
         test_note = (f" · 自带测试：{test_result['summary']}" if test_result.get("ran")
-                     else " · 自带测试未运行")
-        self.status.set(
-            f"扫描 {info['python_files']} 个 Python 文件 · 高危 {counts['高']} / 中危 {counts['中']} / 低危 {counts['低']}{test_note}")
+                     else f" · 自带测试未运行（{test_result.get('reason', '未选择')}）")
+        self.status.set(f"已扫描 {scope} · 高危 {counts['高']} / 中危 {counts['中']} / 低危 {counts['低']}{test_note}")
         self.btn_scan.config(state="normal")
 
+    # ---------------- 结果操作 ----------------
     def open_file(self, _event=None):
         picked = self.tree.selection()
         if not picked:
@@ -123,7 +214,7 @@ class App:
         full = Path(self.info.get("root", "")) / path_text
         if full.exists():
             import os
-            os.startfile(full)   # noqa: S606 - 用户主动双击，打开源文件
+            os.startfile(full)      # noqa: S606 - 用户主动双击，打开源文件
         else:
             messagebox.showinfo("找不到文件", str(full))
 
@@ -131,17 +222,31 @@ class App:
         if not self.info:
             messagebox.showinfo("还没扫描", "先点「开始体检」。")
             return
-        target = Path(self.info["root"]) / "体检报告.html"
-        path = reporter.render_scan_report(self.findings, self.info, self.test_result, target)
+        target_dir = Path(self.info["root"]) if self.info.get("target_file") else Path(self.info["root"])
+        path = reporter.render_scan_report(self.findings, self.info, self.test_result, target_dir / "体检报告.html")
         webbrowser.open(path.as_uri())
         self.status.set(f"报告已生成并打开：{path}")
 
+    def open_console_menu(self):
+        subprocess.Popen([sys.executable, "start_menu.py"], cwd=ROOT,
+                         creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+
 
 def main():
+    parser = argparse.ArgumentParser(description="软件测试可视化 · 主页面")
+    parser.add_argument("--selftest", action="store_true", help="只建窗口并在 1 秒后关闭，用于验证界面能启动")
+    args = parser.parse_args()
+
     root = tk.Tk()
     App(root)
+    if args.selftest:
+        root.after(1000, root.destroy)
+        root.mainloop()
+        print("gui ok")
+        return 0
     root.mainloop()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

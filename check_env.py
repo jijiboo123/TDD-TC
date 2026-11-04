@@ -1,4 +1,4 @@
-"""环境自检：一条命令看清"这台机器现在能不能跑这个项目"。
+"""环境自检：一条命令（或主页面启动时）看清"这台机器现在能不能跑这个项目"。
 
 检查四类东西：
   1. Python 版本（要 3.11+）
@@ -7,7 +7,7 @@
   4. Allure 报告依赖（Java + allure 命令）
 
 用法：python check_env.py
-退出码：接口层依赖缺失时返回 1，其余只提示不阻断。
+GUI 里直接调用 collect_status() 拿结果，不用解析文本。
 """
 
 import importlib.util
@@ -21,6 +21,8 @@ try:
     import winreg
 except ImportError:      # 非 Windows 环境没有注册表
     winreg = None
+
+MODULES = ("pytest", "requests", "allure_pytest", "ruff", "playwright")
 
 
 def registry_env(name):
@@ -96,63 +98,74 @@ def java_status():
     except (OSError, subprocess.SubprocessError) as error:
         return False, str(error)
     text = (done.stderr or done.stdout or "").strip().splitlines()
-    first = text[0] if text else ""
-    return done.returncode == 0, first
+    return done.returncode == 0, (text[0] if text else "")
 
 
-def main():
+def problems_from(status):
     problems = []
+    if not status["python_ok"]:
+        problems.append("升级 Python 到 3.11 以上")
+    for name in ("pytest", "requests"):
+        if not status["modules"][name]:
+            problems.append(f"pip install -r requirements.txt（缺 {name}）")
+    if not status["modules"]["allure_pytest"]:
+        problems.append("pip install allure-pytest（Allure 报告）")
+    if not (status["modules"]["playwright"] and status["chromium"]):
+        problems.append("双击 安装UI依赖.bat（装 playwright + Chromium）")
+    if not (status["java_ok"] and status["allure"]):
+        problems.append("装 JDK + Allure CLI 才能看富报告（README 第 13 节）")
+    return problems
+
+
+def collect_status():
+    """把检查结果收成一个字典，GUI 和命令行共用。"""
+    chromium = chromium_path()
+    java_ok, java_info = java_status()
+    allure_cmd = find_in_path(["allure.bat", "allure.cmd", "allure.exe", "allure"])
+    status = {
+        "os": platform.platform(),
+        "python": platform.python_version(),
+        "python_ok": sys.version_info >= (3, 11),
+        "modules": {name: has_module(name) for name in MODULES},
+        "chromium": chromium.name if chromium else None,
+        "java_ok": java_ok,
+        "java_info": java_info,
+        "allure": str(allure_cmd) if allure_cmd else None,
+    }
+    status["core_ok"] = bool(status["python_ok"] and status["modules"]["pytest"] and status["modules"]["requests"])
+    status["problems"] = problems_from(status)
+    return status
+
+
+def print_status(status):
     print("=" * 62)
     print("  软件测试可视化 · 环境自检")
     print("=" * 62)
-
-    version = platform.python_version()
-    python_ok = sys.version_info >= (3, 11)
-    print(f"{'Python':<16}{version:<24}{'✓' if python_ok else '✗ 需要 3.11+'}")
-    if not python_ok:
-        problems.append("升级 Python 到 3.11 以上")
-
-    print(f"{'操作系统':<14}{platform.platform()[:40]}")
-
-    for module, purpose in (("pytest", "跑测试"), ("requests", "发请求"), ("allure_pytest", "Allure 报告")):
-        ok = has_module(module)
-        print(f"{module:<16}{'已安装' if ok else '未安装':<24}{'✓' if ok else '✗'}")
-        if not ok and module in ("pytest", "requests"):
-            problems.append(f"pip install -r requirements.txt（缺 {module}）")
-
-    ruff_ok = has_module("ruff")
-    print(f"{'ruff':<16}{'已安装' if ruff_ok else '未安装':<24}{'✓' if ruff_ok else '—  可选'}")
-    if not ruff_ok:
-        problems.append("pip install ruff（静态检查，可选）")
-
-    playwright_ok = has_module("playwright")
-    browser = chromium_path()
-    print(f"{'playwright':<16}{'已安装' if playwright_ok else '未安装':<24}{'✓' if playwright_ok else '✗ 可选'}")
-    print(f"{'Chromium':<16}{(browser.name if browser else '未下载'):<24}{'✓' if browser else '✗ 可选'}")
-    if not (playwright_ok and browser):
-        problems.append("双击 安装UI依赖.bat（装 playwright + Chromium）")
-
-    java_ok, java_info = java_status()
-    print(f"{'Java':<16}{(java_info[:24] if java_ok else java_info):<24}{'✓' if java_ok else '✗ 可选'}")
-    allure_cmd = find_in_path(["allure.bat", "allure.cmd", "allure.exe", "allure"])
-    print(f"{'allure 命令':<14}{'已就绪' if allure_cmd else '未找到':<24}{'✓' if allure_cmd else '✗ 可选'}")
-    if not (java_ok and allure_cmd):
-        problems.append("装 JDK + Allure CLI 才能看富报告（README 第 13 节）")
-
+    print(f"{'Python':<16}{status['python']:<24}{'✓' if status['python_ok'] else '✗ 需要 3.11+'}")
+    print(f"{'操作系统':<14}{status['os'][:40]}")
+    for name in ("pytest", "requests", "allure_pytest", "ruff", "playwright"):
+        ok = status["modules"][name]
+        mark = "✓" if ok else ("—  可选" if name in ("ruff", "playwright", "allure_pytest") else "✗")
+        print(f"{name:<16}{'已安装' if ok else '未安装':<24}{mark}")
+    print(f"{'Chromium':<16}{(status['chromium'] or '未下载'):<24}{'✓' if status['chromium'] else '✗ 可选'}")
+    java_mark = "✓" if status["java_ok"] else "✗ 可选"
+    print(f"{'Java':<16}{status['java_info'][:24]:<24}{java_mark}")
+    print(f"{'allure 命令':<14}{'已就绪' if status['allure'] else '未找到':<24}{'✓' if status['allure'] else '✗ 可选'}")
     print("-" * 62)
-    core_ok = python_ok and has_module("pytest") and has_module("requests")
-    if core_ok:
-        print("核心环境 OK：接口测试可以跑。")
-    else:
-        print("核心依赖不全，先按下面的清单补：")
-    if problems:
+    print("核心环境 OK：接口测试可以跑。" if status["core_ok"] else "核心依赖不全，先按下面的清单补：")
+    if status["problems"]:
         print("\n待处理：")
-        for index, item in enumerate(problems, 1):
+        for index, item in enumerate(status["problems"], 1):
             print(f"  {index}. {item}")
     else:
         print("全部就绪（含 UI / Allure / 性能）。")
     print("=" * 62)
-    return 0 if core_ok else 1
+
+
+def main():
+    status = collect_status()
+    print_status(status)
+    return 0 if status["core_ok"] else 1
 
 
 if __name__ == "__main__":

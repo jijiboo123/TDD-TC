@@ -26,6 +26,18 @@ from pathlib import Path
 SEVERITY_ORDER = {"高": 0, "中": 1, "低": 2}
 SEVERITY_COLOR = {"高": "#d9534f", "中": "#e0a13c", "低": "#4c8dff"}
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".pytest_cache"}
+
+# 能检测什么，写在这里给界面和文档共用（别让说明和实现各说各话）
+SUPPORTED = {
+    "Python 源码（.py）":
+        "语法错误、硬编码凭据、危险调用（eval / exec / os.system）、可变默认参数、TODO/FIXME、print 残留、assert 做校验",
+    "敏感文件":
+        ".env / .env.local / id_rsa / id_dsa / credentials.json / .npmrc / .pypirc / secrets.json / config.ini，"
+        "以及 *.pem / *.key / *.pfx / *.p12",
+    "项目卫生（仅目录模式）":
+        "README、.gitignore、tests 目录、requirements.txt 是否存在",
+}
+UNSUPPORTED = "Java / JavaScript / TypeScript / Go 源码暂不解析（目前只做 Python AST）"
 MAX_FILES = 400
 
 
@@ -229,9 +241,32 @@ def run_project_tests(root, timeout=180):
     return {"ran": True, "exit_code": result.returncode, "summary": tail[-1] if tail else "", "output": "\n".join(tail[-25:])}
 
 def collect(root, with_tests=True):
-    """统一入口：静态检查 + 项目级体检 + （可选）跑自带测试并合并失败项"""
-    findings, info = scan_project(root)
-    test_result = run_project_tests(root) if with_tests else {"ran": False, "reason": "已跳过"}
+    """统一入口。
+
+    - 目录模式：静态检查 + 项目级体检 +（可选）跑自带测试并合并失败项；
+    - 单文件模式：只扫这个 .py，不跑项目测试。
+    """
+    target = Path(root).resolve()
+    if target.is_file():
+        if target.suffix.lower() != ".py":
+            raise SystemExit(f"暂不支持这个文件类型：{target.suffix or '无后缀'}（只支持 .py）")
+        findings = scan_python(target, target.name)
+        findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
+        info = {
+            "root": str(target.parent),
+            "python_files": 1,
+            "skipped_files": 0,
+            "has_tests": False,
+            "has_requirements": (target.parent / "requirements.txt").exists(),
+            "has_readme": any(target.parent.glob("README*")),
+            "has_package_json": (target.parent / "package.json").exists(),
+            "has_gitignore": (target.parent / ".gitignore").exists(),
+            "target_file": target.name,
+        }
+        return findings, info, {"ran": False, "reason": "单文件模式不跑项目自带测试"}
+
+    findings, info = scan_project(target)
+    test_result = run_project_tests(target) if with_tests else {"ran": False, "reason": "已跳过"}
     if test_result.get("ran") and test_result.get("exit_code"):
         findings.extend(parse_test_failures(test_result.get("output")))
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))

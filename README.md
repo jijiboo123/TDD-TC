@@ -6,17 +6,23 @@
 
 ## 下次打开先看这里
 
-桌面上有 **「软件测试项目」** 快捷方式，双击打开控制台菜单：
+桌面上有 **「软件测试项目」** 快捷方式（或双击根目录的 `开始使用.bat`），打开就是**主页面**：
 
-```
-1. 环境自检（第一次先跑这个）      6. 看语句覆盖率
-2. 跑接口测试（92 条）             7. 跑性能基线
-3. 跑 UI 测试（9 条）              8. 跑真实公开 API（联网）
-4. 生成 HTML 报告并打开            9. 打开项目文件夹
-5. 生成 Allure 富报告              0. 退出
-```
+![主页面](docs/gui-main.png)
 
-也可以直接双击项目根目录的 **`开始使用.bat`**。
+1. **自动做环境自检**：顶部直接显示 Python / pytest / UI / Allure 是否就绪，缺什么用橙色列出来；
+2. **选被测项目**：`选文件夹…`（整个项目）或 `选 .py 文件…`（单个文件）；
+3. 点 **开始体检**：结果按 高 / 中 / 低 分级列在下面，双击某行可直接打开源文件；
+4. 需要留档就点 **生成 HTML 报告**；想看命令行菜单（跑用例、覆盖率、性能、Allure）点右下角 **打开控制台菜单**。
+
+**能检测哪些文件**（主页面里也写着）：
+
+| 类型 | 检测内容 |
+|---|---|
+| Python 源码 `.py` | 语法错误、硬编码凭据、危险调用（eval / exec / os.system）、可变默认参数、TODO/FIXME、print 残留、assert 做校验 |
+| 敏感文件 | `.env` / `id_rsa` / `credentials.json` / `.npmrc` / `.pypirc` / `secrets.json` / `config.ini`、`*.pem` `*.key` `*.pfx` `*.p12` |
+| 项目卫生（目录模式） | README、`.gitignore`、tests 目录、`requirements.txt` 是否存在 |
+| 暂不支持 | Java / JavaScript / TypeScript / Go 源码（目前只解析 Python AST） |
 
 > 所有 `.bat` 都是**纯 ASCII 启动器**，只负责调用 Python 脚本；中文提示由 Python 输出。
 > 原因是 cmd 会用控制台代码页（936）读取批处理，UTF-8 中文一旦跨读取缓冲区就会裂开，
@@ -26,7 +32,7 @@
 
 1. `pip install -r requirements.txt`
 2. 双击 `安装UI依赖.bat`（要跑 UI 时）
-3. 双击 `开始使用.bat` → 选 **1** 环境自检，缺什么它会直接告诉你
+3. 双击 `开始使用.bat`，主页面顶部的环境状态会告诉你缺什么
 
 环境自检会检查：Python 版本、pytest / requests / allure-pytest、playwright + Chromium、Java + allure 命令 —— 并用注册表里的环境变量判断（新装的东西不用重启也行）。
 
@@ -49,8 +55,9 @@ HTTP 000
 ├─ mock_server.py          本地 API（只用标准库，线程安全）
 ├─ conftest.py             pytest 夹具：起服务、鉴权、造数据、清数据
 ├─ check_env.py            环境自检（Python / 依赖 / 浏览器 / Java）
-├─ start_menu.py           控制台菜单逻辑（中文由 Python 输出，避免 bat 乱码）
-├─ 开始使用.bat            启动器（纯 ASCII，只负责调 start_menu.py）
+├─ tester_gui.py           主页面：自动自检 + 选项目/文件 + 体检 + 出报告
+├─ start_menu.py           控制台菜单（跑用例 / 覆盖率 / 性能 / Allure）
+├─ 开始使用.bat            启动器（纯 ASCII，优先打开主页面，失败退回控制台菜单）
 ├─ retry.py                失败重试插件（零依赖，给 flaky 用例用）
 ├─ coverage_simple.py      语句覆盖率（零依赖，sys.settrace）
 ├─ perf_load.py            性能基线（并发梯度 + p50/p95/p99，零依赖）
