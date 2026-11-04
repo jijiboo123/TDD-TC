@@ -3,8 +3,11 @@
 正常路径谁都会测，异常路径才体现测试功力 —— 这类用例是面试最常问的。
 """
 
+import allure
 import pytest
 import requests
+
+pytestmark = allure.feature("接口 · 参数校验")
 
 
 def _post(base_url, headers, payload):
@@ -57,11 +60,16 @@ def test_update_unknown_booking_returns_404(base_url, auth_headers, booking_payl
 
 # ---- 下面这几条是"等价类 + 边界值"补出来的，也是缺陷 4 的来源 ----
 
+@allure.severity(allure.severity_level.NORMAL)
+@allure.story("金额范围（BUG-004 回归）")
 def test_negative_price_is_rejected(base_url, auth_headers, booking_payload):
     """价格是负数没有业务含义 —— 等价类里的"无效类：负数"必须有对应用例。"""
     payload = {**booking_payload, "totalprice": -1}
-    response = _post(base_url, auth_headers, payload)
-    assert response.status_code == 400, f"负数价格竟然创建成功了：{response.text}"
+    with allure.step("提交 totalprice=-1 的预订"):
+        response = _post(base_url, auth_headers, payload)
+        allure.attach(response.text, name="服务端拒绝原因", attachment_type=allure.attachment_type.JSON)
+    with allure.step("断言被拒绝（400）"):
+        assert response.status_code == 400, f"负数价格竟然创建成功了：{response.text}"
 
 
 def test_same_day_checkin_and_checkout_is_rejected(base_url, auth_headers, booking_payload):

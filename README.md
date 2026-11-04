@@ -51,9 +51,8 @@ HTTP 000
 ├─ snapshots/              契约快照
 ├─ examples/               演示用的"偶发失败"用例（默认不跑）
 ├─ pytest.ini
-├─ requirements.txt        接口层依赖
+├─ requirements.txt        依赖：pytest / requests / allure-pytest
 ├─ requirements-ui.txt     UI 层依赖（playwright）
-├─ requirements-allure.txt Allure 依赖（allure-pytest，还需本机有 Java）
 └─ 运行测试.bat / 安装UI依赖.bat / 运行UI测试.bat / 生成Allure报告.bat / 一键测试.bat
 ```
 
@@ -344,7 +343,7 @@ Allure 能出"用例分组、步骤、附件、趋势"的富报告，代价是�
 |---|---|---|
 | Temurin JDK 25 | `D:\tools\jdk-25.0.5+8` | 免安装 zip，用户级；`JAVA_HOME` 已设 |
 | Allure CLI 2.46.1 | `D:\tools\allure-2.46.1` | 解压版，`bin` 已加进用户 PATH |
-| allure-pytest | pip 包 | 见 `requirements-allure.txt` |
+| allure-pytest | pip 包 | 已并入 `requirements.txt` |
 
 ```powershell
 python -m pytest --alluredir=allure-results -q
@@ -354,6 +353,20 @@ allure serve allure-results      # 起服务并自动开浏览器
 也可以双击 `生成Allure报告.bat`（会先检查 JAVA_HOME 和 allure 是否就绪）。
 
 ![Allure 报告](docs/allure-report.png)
+
+**报告里有什么，全靠这几行标注撑起来**：
+
+| 标注 | 用在哪 | 报告里看到的效果 |
+|---|---|---|
+| `allure.feature("接口 · CRUD")` | 每个测试文件顶部（`pytestmark`） | Behaviors 视图按业务分组，一眼看出哪块测得多 |
+| `@allure.story("创建预订")` | 关键用例 | 同一个 feature 下再按场景分层 |
+| `@allure.severity(CRITICAL)` | 核心用例 | 报告里标出严重级别，能按级别筛 |
+| `with allure.step("POST /booking 创建一条预订")` | 多步骤用例 | 报告里展开成执行步骤，失败停在哪一步一目了然 |
+| `allure.attach(response.text, ...)` | 关键断言前 | 响应体直接挂在报告里，不用回头复现 |
+| UI 失败截图 | `ui_tests/conftest.py` | 失败用例详情页直接看图 |
+| `environment.properties` | `conftest.py` 自动写 | 报告 Environment 区块显示服务地址 / Python / 系统 |
+
+![用例详情：步骤与附件](docs/allure-test-detail.png)
 
 **VS Code 能装 JDK 吗**：VS Code 本身不装 JDK，是"Extension Pack for Java"扩展会提示下载一个，需要你在窗口里点确认。这次改用命令行装了免安装版（不需要管理员）；以后要写 Java，在 VS Code 里装 Java 扩展、把 `java.jdt.ls.java.home` 指向 `D:\tools\jdk-25.0.5+8` 就能复用同一个 JDK。
 

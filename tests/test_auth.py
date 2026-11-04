@@ -1,6 +1,9 @@
 """鉴权：拿 token、错误凭据、缺失/错误 token 的拒绝路径。"""
 
+import allure
 import requests
+
+pytestmark = allure.feature("接口 · 鉴权")
 
 
 def test_auth_returns_token(base_url):

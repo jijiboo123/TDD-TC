@@ -11,10 +11,13 @@
 
 from pathlib import Path
 
+import allure
 import pytest
 import requests
 
 from schema_validator import SchemaError, load, validate
+
+pytestmark = allure.feature("契约 · JSON Schema")
 
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
 
@@ -23,11 +26,14 @@ def schema(name):
     return load(SCHEMA_DIR / name)
 
 
+@allure.severity(allure.severity_level.CRITICAL)
+@allure.story("创建响应契约")
 def test_created_booking_matches_schema(base_url, auth_headers, booking_payload):
     """创建响应：id 是正整数，booking 里 5 个字段齐全、类型对、值合法。"""
     response = requests.post(f"{base_url}/booking", json=booking_payload, headers=auth_headers)
     assert response.status_code == 200
-    validate(response.json(), schema("booking_created.schema.json"), "创建响应")
+    with allure.step("按 booking_created.schema.json 校验响应"):
+        validate(response.json(), schema("booking_created.schema.json"), "创建响应")
 
 
 def test_booking_detail_matches_schema(base_url, created_booking):

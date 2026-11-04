@@ -8,12 +8,13 @@ CI 里通常先跑冒烟，挂了就不用跑后面几百个用例了。
     pytest -m "not smoke"    # 跳过这一组
 """
 
+import allure
 import pytest
 import requests
 
 from assertions import assert_error_message, assert_fields_present, assert_json_field, assert_status
 
-pytestmark = pytest.mark.smoke
+pytestmark = [pytest.mark.smoke, allure.feature("冒烟")]
 
 
 def test_service_is_alive(base_url):

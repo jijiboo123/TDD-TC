@@ -7,10 +7,13 @@
 import json
 from pathlib import Path
 
+import allure
 import pytest
 import requests
 
 from assertions import assert_status
+
+pytestmark = allure.feature("数据驱动")
 
 CASES_FILE = Path(__file__).resolve().parent.parent / "data" / "booking_cases.json"
 CASES = json.loads(CASES_FILE.read_text(encoding="utf-8"))["cases"]

@@ -1,12 +1,20 @@
 """增删改查主流程：一条数据从创建到删除的完整生命周期。"""
 
+import allure
 import requests
 
+pytestmark = allure.feature("接口 · CRUD")
 
+
+@allure.severity(allure.severity_level.CRITICAL)
+@allure.story("创建预订")
 def test_create_returns_booking_id(base_url, auth_headers, booking_payload):
-    response = requests.post(f"{base_url}/booking", json=booking_payload, headers=auth_headers)
-    assert response.status_code == 200
-    assert isinstance(response.json().get("bookingid"), int)
+    with allure.step("POST /booking 创建一条预订"):
+        response = requests.post(f"{base_url}/booking", json=booking_payload, headers=auth_headers)
+        allure.attach(response.text, name="创建响应", attachment_type=allure.attachment_type.JSON)
+    with allure.step("断言返回 200 且 bookingid 是整数"):
+        assert response.status_code == 200
+        assert isinstance(response.json().get("bookingid"), int)
 
 
 def test_create_echoes_payload(base_url, auth_headers, booking_payload):

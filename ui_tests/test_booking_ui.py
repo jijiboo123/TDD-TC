@@ -13,10 +13,11 @@
     python -m pytest ui_tests -v
 """
 
+import allure
 import pytest
 from playwright.sync_api import expect
 
-pytestmark = pytest.mark.ui
+pytestmark = [pytest.mark.ui, allure.feature("UI · 预订管理")]
 
 
 def login(page):

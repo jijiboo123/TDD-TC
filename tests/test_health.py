@@ -1,6 +1,9 @@
 """健康检查与路由：服务活着、返回格式对、不存在的地址要 404。"""
 
+import allure
 import requests
+
+pytestmark = allure.feature("接口 · 健康检查")
 
 
 def test_ping_returns_200(base_url):

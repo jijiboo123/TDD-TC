@@ -13,10 +13,11 @@ import concurrent.futures
 import statistics
 import time
 
+import allure
 import pytest
 import requests
 
-pytestmark = pytest.mark.regression
+pytestmark = [pytest.mark.regression, allure.feature("接口 · 并发")]
 
 WORKERS = 10      # 同时压 10 个线程
 COUNT = 30        # 每个用例发 30 个请求

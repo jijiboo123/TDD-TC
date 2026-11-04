@@ -1,8 +1,11 @@
 """契约测试：响应结构不能悄悄变。"""
 
+import allure
 import requests
 
 import contract
+
+pytestmark = allure.feature("契约 · 快照")
 
 
 def test_booking_response_contract(base_url, auth_headers, booking_payload):

@@ -7,7 +7,9 @@
 """
 
 import os
+import platform
 import socket
+import sys
 import time
 
 import pytest
@@ -17,6 +19,26 @@ import mock_server
 
 # 让 retry.py 里的失败重试插件自动生效（不需要 pip 装 pytest-rerunfailures）
 pytest_plugins = ["retry"]
+
+
+def pytest_configure(config):
+    """跑 --alluredir 时写一份环境信息，Allure 报告的 Environment 区块会显示它。"""
+    try:
+        alluredir = config.getoption("allure_report_dir", None)
+    except (ValueError, AttributeError):
+        return
+    if not alluredir:
+        return
+    from pathlib import Path
+
+    target = Path(alluredir) / "environment.properties"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    rows = {
+        "service": os.environ.get("API_BASE_URL", "local mock (auto port)"),
+        "python": sys.version.split()[0],
+        "os": platform.platform(),
+    }
+    target.write_text("".join(f"{key}={value}\n" for key, value in rows.items()), encoding="utf-8")
 
 
 def _wait_ready(base_url, timeout=5.0):

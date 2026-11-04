@@ -13,6 +13,7 @@ import time
 import warnings
 from pathlib import Path
 
+import allure
 import pytest
 from playwright.sync_api import sync_playwright
 
@@ -50,8 +51,11 @@ def page(browser, base_url, request):
             stamp = time.strftime("%Y%m%d-%H%M%S")
             name = request.node.name.replace("[", "_").replace("]", "")
             try:
-                ui.screenshot(path=str(ARTIFACTS / f"{name}-{stamp}.png"), full_page=True)
+                shot = ARTIFACTS / f"{name}-{stamp}.png"
+                ui.screenshot(path=str(shot), full_page=True)
                 context.tracing.stop(path=str(ARTIFACTS / f"{name}-{stamp}.zip"))
+                # 同一张截图挂进 Allure 报告，失败原因和现场放在一起看
+                allure.attach.file(str(shot), name="失败截图", attachment_type=allure.attachment_type.PNG)
             except Exception as error:
                 # 页面已经崩了也要让原始失败信息露出来，别被留存逻辑盖住
                 warnings.warn(f"失败现场保存失败：{error}", RuntimeWarning)

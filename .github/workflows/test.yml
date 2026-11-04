@@ -100,7 +100,7 @@ jobs:
           java-version: "21"
       - name: 安装依赖 + Allure CLI
         run: |
-          pip install -r requirements.txt -r requirements-allure.txt
+          pip install -r requirements.txt
           curl -sSL -o allure.zip https://repo1.maven.org/maven2/io/qameta/allure/allure-commandline/2.46.1/allure-commandline-2.46.1.zip
           unzip -q allure.zip
       - name: 跑用例并生成报告
