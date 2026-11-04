@@ -1,0 +1,6 @@
+@echo off
+cd /d "%~dp0"
+echo ==== ????????? ====
+python -m pytest
+echo.
+pause >nul
