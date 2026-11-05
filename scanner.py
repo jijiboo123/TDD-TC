@@ -270,6 +270,12 @@ def scan_project(root):
     for path in text_files:
         findings.extend(scan_text_code(path, path.relative_to(root).as_posix()))
 
+    # 目录模式下先看看这里是不是"一个工作区里塞了很多项目"——那种情况跑测试基本一定失败
+    project_markers = [
+        marker for marker in list(root.glob("*/requirements.txt")) + list(root.glob("*/pyproject.toml"))
+        + list(root.glob("*/package.json"))
+    ]
+
     info = {
         "root": str(root),
         "python_files": len(python_files),
@@ -280,13 +286,21 @@ def scan_project(root):
         "has_readme": any(root.glob("README*")),
         "has_package_json": (root / "package.json").exists(),
         "has_gitignore": (root / ".gitignore").exists(),
+        "sub_projects": len(project_markers),
+        "multi_project": len(project_markers) >= 2 and not (root / "requirements.txt").exists(),
     }
     findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
     return findings, info
 
 
 def run_project_tests(root, timeout=180):
-    """如果项目自带 pytest 用例，就跑一遍并把结果带回来"""
+    """如果项目自带 pytest 用例，就跑一遍并把结果带回来。
+
+    三种结果要分清（否则会把"依赖没装"误报成"用例失败"）：
+      - exit 0：全绿
+      - exit 1：有用例失败（真实缺陷）
+      - exit 2：收集/执行阶段就挂了（多半是依赖缺失、目录选大了）
+    """
     root = Path(root).resolve()
     if not any("test" in p.name.lower() for p in root.glob("**/*.py")):
         return {"ran": False, "reason": "项目里没有测试文件，无法验证行为"}
@@ -297,8 +311,16 @@ def run_project_tests(root, timeout=180):
         )
     except subprocess.TimeoutExpired:
         return {"ran": False, "reason": f"测试超过 {timeout} 秒未结束，已放弃"}
-    tail = [line for line in (result.stdout or "").strip().splitlines() if line.strip()]
-    return {"ran": True, "exit_code": result.returncode, "summary": tail[-1] if tail else "", "output": "\n".join(tail[-25:])}
+    output = result.stdout or ""
+    tail = [line for line in output.strip().splitlines() if line.strip()]
+    collection_failed = result.returncode == 2 or "ERROR collecting" in output
+    return {
+        "ran": True,
+        "exit_code": result.returncode,
+        "collection_failed": collection_failed,
+        "summary": tail[-1] if tail else "",
+        "output": "\n".join(tail[-60:]),
+    }
 
 def collect(root, with_tests=True):
     """统一入口。
@@ -333,8 +355,11 @@ def collect(root, with_tests=True):
 
     findings, info = scan_project(target)
     test_result = run_project_tests(target) if with_tests else {"ran": False, "reason": "已跳过"}
-    if test_result.get("ran") and test_result.get("exit_code"):
+    if test_result.get("collection_failed"):
+        findings.extend(parse_collection_error(test_result.get("output")))
+    elif test_result.get("ran") and test_result.get("exit_code") == 1:
         findings.extend(parse_test_failures(test_result.get("output")))
+    if test_result.get("ran") or test_result.get("collection_failed"):
         findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
     return findings, info, test_result
 
@@ -411,18 +436,38 @@ def scan_hygiene(root, info):
     return findings
 
 
-def parse_test_failures(output):
-    """从 pytest 输出里提取失败用例，转成 findings"""
+def parse_test_failures(output, limit=20):
+    """从 pytest 输出里提取失败用例，转成 findings（最多列 limit 条，免得刷屏）"""
     findings = []
     for line in (output or "").splitlines():
         stripped = line.strip()
-        if stripped.startswith("FAILED ") or stripped.startswith("ERROR "):
+        if stripped.startswith("FAILED "):
             parts = stripped.split(" ", 1)[1]
             location, _, reason = parts.partition(" - ")
             findings.append(Finding(location, 0, "高", "测试失败",
                                     reason.strip() or "用例失败",
                                     "这条用例红了，说明对应功能当前不可用"))
+            if len(findings) >= limit:
+                break
     return findings
+
+
+def parse_collection_error(output):
+    """收集失败只报一条：优先报根因（缺哪个模块），没有就报第一条 ERROR collecting。"""
+    detail = "pytest 在收集阶段失败，没进入用例执行"
+    lines = [line.strip() for line in (output or "").splitlines() if line.strip()]
+    for line in lines:
+        if "No module named" in line or "ModuleNotFoundError" in line:
+            detail = line[:200]
+            break
+    else:
+        for line in lines:
+            if "ERROR collecting" in line:
+                detail = line[:200]
+                break
+    return [Finding("-", 0, "中", "测试无法收集", detail,
+                    "多半是依赖没装或目录选大了：先在该项目里 pip install -r requirements.txt，"
+                    "再确认选的是具体项目子目录")]
 
 
 if __name__ == "__main__":

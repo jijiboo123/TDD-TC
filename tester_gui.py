@@ -212,8 +212,14 @@ class App:
             scope = f"{info['python_files']} 个 Python 文件"
             if info.get("other_files"):
                 scope += f" + {info['other_files']} 个其他源码"
-        test_note = (f" · 自带测试：{test_result['summary']}" if test_result.get("ran")
-                     else f" · 自带测试未运行（{test_result.get('reason', '未选择')}）")
+        if test_result.get("collection_failed"):
+            test_note = " · 自带测试：无法收集（多半缺依赖或目录选太大）"
+        elif test_result.get("ran"):
+            test_note = f" · 自带测试：{test_result['summary']}"
+        else:
+            test_note = f" · 自带测试未运行（{test_result.get('reason', '未选择')}）"
+        if info.get("multi_project"):
+            test_note += f" · 注意：这个目录下有 {info['sub_projects']} 个独立项目，建议选具体项目子目录"
         self.status.set(f"已扫描 {scope} · 高危 {counts['高']} / 中危 {counts['中']} / 低危 {counts['低']}{test_note}")
         self.btn_scan.config(state="normal")
 
