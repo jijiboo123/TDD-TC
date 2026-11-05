@@ -212,7 +212,8 @@ class Visitor(ast.NodeVisitor):
             if re.search(r"\bprint\(", line) and not is_cli_entry and "test" not in self.rel.lower():
                 self.findings.append(Finding(self.rel, number, "低", "调试残留", "生产代码里有 print()",
                                              "改用 logging，否则输出会混进业务日志"))
-            if re.search(r"assert\s+", line) and not is_cli_entry and not any(k in self.rel.lower() for k in ("test", "assert")):
+            # 只认真正以 assert 开头的代码行；文档里提到 "assert" 不算
+            if re.match(r"\s*assert\s", line) and not is_cli_entry and not any(k in self.rel.lower() for k in ("test", "assert")):
                 self.findings.append(Finding(self.rel, number, "中", "用断言做校验", "用 assert 检查业务条件",
                                              "python -O 会移除 assert，校验会失效；改用显式 raise"))
 
@@ -302,6 +303,7 @@ def scan_project(root):
         findings.extend(scan_python(path, path.relative_to(root).as_posix()))
     for path in text_files:
         findings.extend(scan_text_code(path, path.relative_to(root).as_posix()))
+    findings.extend(scan_sensitive(root))
 
     # 目录模式下先看看这里是不是"一个工作区里塞了很多项目"——那种情况跑测试一定是在跑别人家
     sub_projects = list_sub_projects(root)

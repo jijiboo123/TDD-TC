@@ -117,3 +117,32 @@ def test_suppression_marker_works_for_js(tmp_path):
     findings, _, _ = scanner.collect(str(target), with_tests=False)
     assert findings == []
 
+
+# ---- 目录模式：敏感文件 / 文档里的关键词误报 ----
+
+
+def test_sensitive_file_is_reported(tmp_path):
+    """credentials.json 这种文件不扫内容，直接按文件名报高危。"""
+    write(tmp_path / "main.py", "value = 1\n")
+    (tmp_path / "config").mkdir()
+    write(tmp_path / "config" / "credentials.json", '{"api_key": "demo"}\n')
+
+    findings, _, _ = scanner.collect(str(tmp_path), with_tests=False)
+    sensitive = [item for item in findings if item.kind == "敏感文件"]
+    assert len(sensitive) == 1
+    assert "credentials.json" in sensitive[0].path
+
+
+def test_assert_mentioned_in_docstring_is_not_flagged(tmp_path):
+    """文档字符串里提到 assert 不算问题，只有真正的 assert 语句才算。"""
+    target = write(tmp_path / "demo.py", (
+        '"""这里说明：refund 用 assert 做权限校验。"""\n'
+        "\n"
+        "def refund(actor):\n"
+        '    assert actor == "admin"\n'
+        "    return True\n"
+    ))
+    findings, _, _ = scanner.collect(str(target), with_tests=False)
+    assert [item.line for item in findings if item.kind == "用断言做校验"] == [4]
+
+
