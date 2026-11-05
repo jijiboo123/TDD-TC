@@ -13,6 +13,11 @@
     python scanner.py <项目目录>              # 命令行输出
     python scanner.py <项目目录> --html 报告.html
     python tester_gui.py                     # 图形界面
+
+有意为之的写法可以豁免：在那一行加 `# scanner: ignore`，例如
+
+    except ValueError:  # scanner: ignore - 格式不认识就走下面的兜底
+        pass
 """
 
 import argparse
@@ -212,6 +217,16 @@ class Visitor(ast.NodeVisitor):
                                              "python -O 会移除 assert，校验会失效；改用显式 raise"))
 
 
+SUPPRESSION_MARKER = "scanner:ignore"      # 行内有这个标记就不报（空格不敏感）
+
+
+def is_suppressed(lines, lineno):
+    """这一行是否被 `# scanner: ignore` 标记为"有意为之"。"""
+    if not lineno or lineno < 1 or lineno > len(lines):
+        return False
+    return SUPPRESSION_MARKER in lines[lineno - 1].lower().replace(" ", "")
+
+
 def scan_python(path, rel_path):
     """扫一个 .py 文件：语法错误 + AST 检查 + 文本检查"""
     try:
@@ -229,7 +244,8 @@ def scan_python(path, rel_path):
     visitor = Visitor(source, rel_path)
     visitor.visit(tree)
     visitor.check_text()
-    return visitor.findings
+    lines = source.splitlines()
+    return [item for item in visitor.findings if not is_suppressed(lines, item.line)]
 
 
 def scan_text_code(path, rel_path):
@@ -240,10 +256,11 @@ def scan_text_code(path, rel_path):
         return [Finding(rel_path, 0, "中", "读取失败", str(err), "检查文件权限或编码")]
 
     language = TEXT_LANGUAGES.get(path.suffix.lower(), "文本")
+    lines = source.splitlines()
     findings = []
-    for number, line in enumerate(source.splitlines(), 1):
+    for number, line in enumerate(lines, 1):
         stripped = line.strip()
-        if stripped.startswith(("//", "/*", "*", "#")):
+        if stripped.startswith(("//", "/*", "*", "#")) or is_suppressed(lines, number):
             continue
         for pattern, severity, kind, detail, advice in TEXT_RULES:
             if pattern.search(line):

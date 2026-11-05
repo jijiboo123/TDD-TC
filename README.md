@@ -28,6 +28,15 @@
 | 项目卫生（仅目录模式） | README、`.gitignore`、tests 目录、`requirements.txt` 是否存在 |
 | 说明 | Java / JS / TS / Go 用正则规则，精度低于 Python AST；不做类型检查 |
 
+**觉得某条是误报？** 确认它是"有意为之"以后，在那一行加 `# scanner: ignore`，体检器会跳过这一行：
+
+```python
+except ValueError:  # scanner: ignore - 解析不了就走下面的兜底
+    pass
+```
+
+不加标记就照常报——这样"有意降级"和"忘了处理"能区分开。
+
 > 所有 `.bat` 都是**纯 ASCII 启动器**，只负责调用 Python 脚本；中文提示由 Python 输出。
 > 原因是 cmd 会用控制台代码页（936）读取批处理，UTF-8 中文一旦跨读取缓冲区就会裂开，
 > 出现"半行被当成命令执行"的怪错——这个坑 v1.0.2 已经踩过并修掉。

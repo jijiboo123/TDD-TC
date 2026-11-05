@@ -81,3 +81,39 @@ def test_unsupported_extension_is_rejected(tmp_path):
         assert ".py" in str(error)
     else:
         raise AssertionError("未知后缀应当被拒绝")
+
+
+# ---- 豁免注释：有意为之的写法不该被报 ----
+
+
+def test_suppression_marker_hides_python_finding(tmp_path):
+    target = write(tmp_path / "demo.py", (
+        "def parse(text):\n"
+        "    try:\n"
+        "        return int(text)\n"
+        "    except ValueError:  # scanner: ignore - 解析不了就走下面的兜底\n"
+        "        pass\n"
+        "    return 0\n"
+    ))
+    findings, _, _ = scanner.collect(str(target), with_tests=False)
+    assert findings == []
+
+
+def test_without_marker_still_reports(tmp_path):
+    target = write(tmp_path / "demo.py", (
+        "def parse(text):\n"
+        "    try:\n"
+        "        return int(text)\n"
+        "    except ValueError:\n"
+        "        pass\n"
+        "    return 0\n"
+    ))
+    findings, _, _ = scanner.collect(str(target), with_tests=False)
+    assert any(item.kind == "异常被吞掉" for item in findings)
+
+
+def test_suppression_marker_works_for_js(tmp_path):
+    target = write(tmp_path / "app.js", 'console.log("debug");  // scanner: ignore - 演示用的\n')
+    findings, _, _ = scanner.collect(str(target), with_tests=False)
+    assert findings == []
+
