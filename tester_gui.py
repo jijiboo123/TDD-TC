@@ -180,13 +180,19 @@ class App:
             self.refresh_subprojects()
 
     def refresh_subprojects(self):
-        """选到工作区（一层里有多个项目）时，列出子项目让用户挑，而不是替他乱跑。"""
+        """选到工作区（一层里有多个项目）时，列出子项目让用户挑，而不是替他乱跑。
+
+        注意：不能把用户已经选好的子项目重置掉——开始体检前会再调一次这个函数，
+        一重置就变成"又没选子项目"，然后弹窗拦住自己。
+        """
         base = Path(self.target.get().strip())
         found = scanner.list_sub_projects(base) if base.is_dir() else []
+        current = self.subproject.get()
         if found:
             self.sub_box.configure(state="readonly")
             self.sub_box["values"] = ["（请选择子项目）", *found]
-            self.subproject.set("（请选择子项目）")
+            if current not in found:
+                self.subproject.set("（请选择子项目）")
         else:
             self.sub_box.configure(state="disabled")
             self.sub_box["values"] = []
@@ -214,6 +220,8 @@ class App:
             messagebox.showerror("暂不支持", f"{path.suffix or '无后缀'} 暂不支持，可扫描：{', '.join(sorted(allowed))}")
             return
         if path.is_dir():
+            # 先刷新子项目列表：用户可能是手输路径，下拉框还没填过，直接提示"去选子项目"会卡死
+            self.refresh_subprojects()
             subs = scanner.list_sub_projects(path)
             chosen = self.subproject.get()
             if subs and chosen not in subs and self.run_tests.get():
@@ -223,6 +231,7 @@ class App:
                     + "\n\n请在上方「子项目」里选一个再体检；\n"
                       "只想做静态检查、不跑测试的话，取消勾选「同时跑项目自带测试」。",
                 )
+                self.status.set("这是工作区：请在上方「子项目」里选一个，或取消勾选「跑自带测试」只做静态检查")
                 return
         scan_target = self.resolve_target()
         self.btn_scan.config(state="disabled")
@@ -260,7 +269,8 @@ class App:
         elif test_result.get("collection_failed"):
             test_note = " · 自带测试：无法收集（多半缺依赖或目录选太大）"
         elif test_result.get("ran"):
-            test_note = f" · 自带测试：{test_result['summary']}"
+            summary = (test_result.get("summary") or "").strip("= ").strip()
+            test_note = f" · 自带测试：{summary}"
         else:
             test_note = f" · 自带测试未运行（{test_result.get('reason', '未选择')}）"
         if info.get("multi_project"):

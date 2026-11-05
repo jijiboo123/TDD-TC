@@ -25,7 +25,11 @@ from pathlib import Path
 
 SEVERITY_ORDER = {"高": 0, "中": 1, "低": 2}
 SEVERITY_COLOR = {"高": "#d9534f", "中": "#e0a13c", "低": "#4c8dff"}
-SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".pytest_cache"}
+SKIP_DIRS = {
+    ".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".pytest_cache",
+    # 跑测试/生成报告产生的目录：扫它们只会带来一堆无意义的"问题"
+    "allure-results", "allure-report", "artifacts", "htmlcov", ".mypy_cache", ".ruff_cache",
+}
 
 # 能检测什么，写在这里给界面和文档共用（别让说明和实现各说各话）
 SUPPORTED = {
@@ -196,7 +200,8 @@ class Visitor(ast.NodeVisitor):
             if stripped.startswith("#"):
                 continue
             # 跳过规则定义行本身，否则扫描器会把自己的规则当成待办
-            if re.search(r"\b(TODO|FIXME|XXX)\b", line) and "re.search(" not in line and "待办标记" not in line and "TODO/FIXME" not in line:
+            is_rule_definition = any(token in line for token in ("re.search(", "re.compile(", "待办标记", "TODO/FIXME"))
+            if re.search(r"\b(TODO|FIXME|XXX)\b", line) and not is_rule_definition:
                 self.findings.append(Finding(self.rel, number, "低", "待办标记", "代码里有 TODO/FIXME",
                                              "确认这些没被忘记；交付前应清理"))
             if re.search(r"\bprint\(", line) and not is_cli_entry and "test" not in self.rel.lower():

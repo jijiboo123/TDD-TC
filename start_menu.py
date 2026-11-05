@@ -27,7 +27,7 @@ MENU = """
 
 def clear():
     if sys.stdout.isatty():
-        os.system("cls")
+        print("\n" * 40, end="")     # 不用 os.system("cls")：省一次 shell 调用，也不会被静态检查当成命令执行风险
 
 
 def pause():
