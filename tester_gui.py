@@ -39,6 +39,7 @@ class App:
         root.minsize(960, 640)
 
         self.target = tk.StringVar(value="")
+        self.subproject = tk.StringVar(value="（当前目录）")
         self.status = tk.StringVar(value="选一个文件夹或源码文件，点「开始体检」")
         self.env_text = tk.StringVar(value="正在检测环境…")
 
@@ -78,6 +79,13 @@ class App:
         self.btn_scan.pack(side="left", padx=8)
         self.run_tests = tk.BooleanVar(value=True)
         ttk.Checkbutton(row, text="同时跑项目自带测试", variable=self.run_tests).pack(side="left")
+
+        row2 = ttk.Frame(box)
+        row2.pack(fill="x", pady=(6, 0))
+        ttk.Label(row2, text="子项目").pack(side="left")
+        self.sub_box = ttk.Combobox(row2, textvariable=self.subproject, state="disabled", width=42)
+        self.sub_box.pack(side="left", padx=6)
+        ttk.Label(row2, text="（选到工作区目录时，在这里挑具体项目）", foreground="#6b7280").pack(side="left")
 
     def _build_support(self):
         box = ttk.LabelFrame(self.root, text=" 能检测哪些文件 ", padding=(10, 6))
@@ -153,6 +161,7 @@ class App:
         chosen = filedialog.askdirectory(title="选择要体检的软件文件夹")
         if chosen:
             self.target.set(chosen)
+            self.refresh_subprojects()
 
     def pick_file(self):
         chosen = filedialog.askopenfilename(
@@ -168,6 +177,28 @@ class App:
         )
         if chosen:
             self.target.set(chosen)
+            self.refresh_subprojects()
+
+    def refresh_subprojects(self):
+        """选到工作区（一层里有多个项目）时，列出子项目让用户挑，而不是替他乱跑。"""
+        base = Path(self.target.get().strip())
+        found = scanner.list_sub_projects(base) if base.is_dir() else []
+        if found:
+            self.sub_box.configure(state="readonly")
+            self.sub_box["values"] = ["（请选择子项目）", *found]
+            self.subproject.set("（请选择子项目）")
+        else:
+            self.sub_box.configure(state="disabled")
+            self.sub_box["values"] = []
+            self.subproject.set("（当前目录）")
+
+    def resolve_target(self):
+        """返回真正要扫的路径：选了子项目就用子项目。"""
+        base = Path(self.target.get().strip())
+        chosen = self.subproject.get()
+        if base.is_dir() and chosen not in ("（当前目录）", "（请选择子项目）", ""):
+            return base / chosen
+        return base
 
     def start(self):
         target = self.target.get().strip()
@@ -182,9 +213,21 @@ class App:
         if path.is_file() and path.suffix.lower() not in allowed:
             messagebox.showerror("暂不支持", f"{path.suffix or '无后缀'} 暂不支持，可扫描：{', '.join(sorted(allowed))}")
             return
+        if path.is_dir():
+            subs = scanner.list_sub_projects(path)
+            chosen = self.subproject.get()
+            if subs and chosen not in subs and self.run_tests.get():
+                messagebox.showwarning(
+                    "这是工作区，不是单个项目",
+                    f"这个目录下有 {len(subs)} 个独立项目：\n" + "\n".join(f"  · {name}" for name in subs[:8])
+                    + "\n\n请在上方「子项目」里选一个再体检；\n"
+                      "只想做静态检查、不跑测试的话，取消勾选「同时跑项目自带测试」。",
+                )
+                return
+        scan_target = self.resolve_target()
         self.btn_scan.config(state="disabled")
-        self.status.set("正在扫描…")
-        threading.Thread(target=self._scan_worker, args=(str(path), self.run_tests.get()), daemon=True).start()
+        self.status.set(f"正在扫描 {scan_target} …")
+        threading.Thread(target=self._scan_worker, args=(str(scan_target), self.run_tests.get()), daemon=True).start()
 
     def _scan_worker(self, target, with_tests):
         try:
@@ -212,7 +255,9 @@ class App:
             scope = f"{info['python_files']} 个 Python 文件"
             if info.get("other_files"):
                 scope += f" + {info['other_files']} 个其他源码"
-        if test_result.get("collection_failed"):
+        if test_result.get("skipped_workspace"):
+            test_note = " · 自带测试：已跳过（这是工作区，请在上面选具体子项目）"
+        elif test_result.get("collection_failed"):
             test_note = " · 自带测试：无法收集（多半缺依赖或目录选太大）"
         elif test_result.get("ran"):
             test_note = f" · 自带测试：{test_result['summary']}"

@@ -68,3 +68,24 @@ def test_multi_project_directory_is_flagged(tmp_path):
     _, info, _ = scanner.collect(str(tmp_path), with_tests=False)
     assert info["multi_project"] is True
     assert info["sub_projects"] == 2
+    assert info["sub_project_list"] == ["proj_a", "proj_b"]
+
+
+def test_workspace_never_runs_other_projects_tests(tmp_path):
+    """真正的保护：工作区目录即使勾了跑测试，也不去跑别人家的测试。"""
+    for name in ("proj_a", "proj_b"):
+        folder = tmp_path / name
+        folder.mkdir()
+        (folder / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+        # 故意让"别人家"的测试必然失败，验证根本不会被执行
+        (folder / "test_broken.py").write_text("def test_x():\n    assert 1 == 2\n", encoding="utf-8")
+
+    findings, info, result = scanner.collect(str(tmp_path), with_tests=True)
+
+    assert result["ran"] is False
+    assert result["skipped_workspace"] is True
+    assert "测试失败" not in [item.kind for item in findings]
+    not_run = [item for item in findings if item.kind == "测试未运行"]
+    assert len(not_run) == 1
+    assert "proj_a" in not_run[0].detail
+

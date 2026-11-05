@@ -246,6 +246,17 @@ def scan_text_code(path, rel_path):
     return findings
 
 
+def list_sub_projects(root):
+    """返回 root 下一层的"独立项目"目录（靠依赖清单识别）。"""
+    root = Path(root).resolve()
+    markers = (
+        list(root.glob("*/requirements.txt"))
+        + list(root.glob("*/pyproject.toml"))
+        + list(root.glob("*/package.json"))
+    )
+    return sorted({marker.parent.relative_to(root).as_posix() for marker in markers})
+
+
 def scan_project(root):
     """扫整个项目，返回 (findings, 项目信息)"""
     root = Path(root).resolve()
@@ -270,11 +281,8 @@ def scan_project(root):
     for path in text_files:
         findings.extend(scan_text_code(path, path.relative_to(root).as_posix()))
 
-    # 目录模式下先看看这里是不是"一个工作区里塞了很多项目"——那种情况跑测试基本一定失败
-    project_markers = [
-        marker for marker in list(root.glob("*/requirements.txt")) + list(root.glob("*/pyproject.toml"))
-        + list(root.glob("*/package.json"))
-    ]
+    # 目录模式下先看看这里是不是"一个工作区里塞了很多项目"——那种情况跑测试一定是在跑别人家
+    sub_projects = list_sub_projects(root)
 
     info = {
         "root": str(root),
@@ -286,8 +294,9 @@ def scan_project(root):
         "has_readme": any(root.glob("README*")),
         "has_package_json": (root / "package.json").exists(),
         "has_gitignore": (root / ".gitignore").exists(),
-        "sub_projects": len(project_markers),
-        "multi_project": len(project_markers) >= 2 and not (root / "requirements.txt").exists(),
+        "sub_projects": len(sub_projects),
+        "sub_project_list": sub_projects,
+        "multi_project": len(sub_projects) >= 2 and not (root / "requirements.txt").exists(),
     }
     findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
     return findings, info
@@ -354,13 +363,26 @@ def collect(root, with_tests=True):
         return findings, info, {"ran": False, "reason": "单文件模式不跑项目自带测试"}
 
     findings, info = scan_project(target)
-    test_result = run_project_tests(target) if with_tests else {"ran": False, "reason": "已跳过"}
+    if with_tests and info.get("multi_project"):
+        # 真正的保护：这是工作区，不是单个项目。绝不替用户去跑别人家的测试。
+        names = "、".join(info.get("sub_project_list", [])[:6])
+        test_result = {
+            "ran": False,
+            "reason": f"这个目录下有 {info['sub_projects']} 个独立项目，已跳过跑测试",
+            "skipped_workspace": True,
+        }
+        findings.append(Finding(
+            "-", 0, "中", "测试未运行",
+            f"检测到 {info['sub_projects']} 个项目：{names}",
+            "请选择具体的项目子目录再体检——否则跑的是别的项目的测试，失败也不代表你的代码有问题",
+        ))
+    else:
+        test_result = run_project_tests(target) if with_tests else {"ran": False, "reason": "已跳过"}
     if test_result.get("collection_failed"):
         findings.extend(parse_collection_error(test_result.get("output")))
     elif test_result.get("ran") and test_result.get("exit_code") == 1:
         findings.extend(parse_test_failures(test_result.get("output")))
-    if test_result.get("ran") or test_result.get("collection_failed"):
-        findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
+    findings.sort(key=lambda f: (SEVERITY_ORDER[f.severity], f.path, f.line))
     return findings, info, test_result
 
 
