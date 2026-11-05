@@ -1,6 +1,6 @@
 # 软件测试可视化
 
-接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 98 个用例、UI 9 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、幂等重放、性能基线、浏览器端主流程（含房型与库存），并自带零依赖的指标工具（报告 / 覆盖率 / 性能 / 失败现场留存）。
+接口自动化 + UI 自动化练习项目：**pytest + requests + Playwright**，接口 110 个用例、UI 9 个用例，覆盖正常流程、异常边界、并发安全、契约规则、角色越权、分页边界、库存超卖、幂等重放、性能基线、浏览器端主流程（含房型与库存），并自带零依赖的指标工具（报告 / 覆盖率 / 性能 / 失败现场留存）。
 
 配套文档：**[测试方案](docs/测试方案.md)**（范围 / 策略 / 等价类 / 边界值 / 判定表 / 用例清单）、**[缺陷记录](docs/缺陷记录.md)**（7 个缺陷的完整缺陷单）。
 
@@ -49,6 +49,30 @@ except ValueError:  # scanner: ignore - 解析不了就走下面的兜底
 
 环境自检会检查：Python 版本、pytest / requests / allure-pytest、playwright + Chromium、Java + allure 命令 —— 并用注册表里的环境变量判断（新装的东西不用重启也行）。
 
+### 一条命令看项目整体还健不健康
+
+双击 **`项目自检.bat`**（或命令行 `python self_check.py`），一次跑完 9 项：
+
+```
+[OK] 环境      Python 3.13.14
+[OK] 结构      18 项齐全
+[OK] ruff      0 告警
+[OK] 自扫      36 个 Python 文件，高危 0 / 共 0 条
+[OK] 接口测试    110 条：通过 107，跳过 3，失败 0
+[OK] UI 测试     9 passed in 3.59s
+[OK] 覆盖率     95.0%（门槛 90%）
+[OK] 文档数字    接口 110 + UI 9 = 119 条，文档与代码一致
+[OK] 入口自检    主页面可构建
+[--] git       有 3 个未提交改动（提醒，不算失败）
+```
+
+- `python self_check.py --quick`：跳过 UI（没装浏览器时更快）
+- `python self_check.py --min-coverage 80`：改覆盖率门槛
+- `python self_check.py --json 自检结果.json`：结果存 JSON
+
+它最有用的一项是**检查文档数字**：README / 测试方案里写的用例数如果和实际跑出来的对不上，会直接报红——
+版本迭代时最容易忘的就是改文档里的数字。
+
 
 ## 为什么自带一个 mock 服务
 
@@ -69,7 +93,9 @@ HTTP 000
 ├─ conftest.py             pytest 夹具：起服务、鉴权、造数据、清数据
 ├─ check_env.py            环境自检（Python / 依赖 / 浏览器 / Java）
 ├─ tester_gui.py           主页面：自动自检 + 选项目/文件 + 体检 + 出报告
-├─ start_menu.py           控制台菜单（跑用例 / 覆盖率 / 性能 / Allure）
+├─ self_check.py           项目自检：环境/结构/静态/测试/覆盖率/文档数字/入口 一次跑完
+├─ 项目自检.bat            双击即跑 self_check.py（纯 ASCII 启动器）
+├─ start_menu.py           控制台菜单（跑用例 / 覆盖率 / 性能 / Allure / 全项目自检）
 ├─ launch_gui.vbs          无控制台启动主页面（快捷方式指向它）
 ├─ 开始使用.bat            启动器（纯 ASCII，调 launch_gui.vbs 后立即退出）
 ├─ retry.py                失败重试插件（零依赖，给 flaky 用例用）
@@ -126,9 +152,9 @@ Windows 上也可以双击 `运行测试.bat`。
 实测输出：
 
 ```
-collected 98 items
+collected 110 items
 ...
-==================== 95 passed, 3 skipped in 1.50s ====================
+==================== 107 passed, 3 skipped in 2.50s ====================
 ```
 
 （跳过的 3 个是 `test_my_api_template.py` 里的模板用例，删掉 `@pytest.mark.skip` 就会执行。）
@@ -156,7 +182,7 @@ python -m pytest ui_tests -q
 | 并发 | 10 线程并发建 30 条不重号、不丢数据、改不同单子互不干扰、重复删除只成功一次、健康检查延迟 < 200ms |
 | UI | 页面加载、登录解锁创建、创建后列表可见、空名字显示后端错误、改价、删除、房型选择与库存显示、售罄提示 |
 
-**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 107 个用例其实只用了 89 个测试函数。
+**参数化用例**（`@pytest.mark.parametrize`）一个函数覆盖多个边界值，所以 119 个用例其实只用了 104 个测试函数（其中 3 个模板用例默认跳过）。
 
 ## 几个值得注意的设计
 
